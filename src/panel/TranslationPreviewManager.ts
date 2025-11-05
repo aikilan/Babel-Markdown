@@ -1,10 +1,10 @@
 import * as vscode from 'vscode';
 
 import type { ExtensionConfiguration } from '../types/config';
-import type { ResolvedTranslationConfiguration, TranslationResult } from '../types/translation';
+import type { ResolvedTranslationConfiguration } from '../types/translation';
 import { TranslationService } from '../services/TranslationService';
 import { TranslationCache } from '../services/TranslationCache';
-import { escapeHtml } from '../utils/text';
+import type { HostToWebviewMessage, WebviewToHostMessage } from '../messaging/channel';
 import { ExtensionLogger } from '../utils/logger';
 
 interface PreviewEntry {
@@ -83,6 +83,16 @@ export class TranslationPreviewManager implements vscode.Disposable {
     );
 
     panel.iconPath = vscode.Uri.joinPath(this.extensionUri, 'assets', 'icons', 'preview.svg');
+    panel.webview.onDidReceiveMessage((message: WebviewToHostMessage) => {
+      if (message.type === 'log') {
+        this.logger.info(`[Webview] ${message.payload.level}: ${message.payload.message}`);
+        return;
+      }
+
+      if (message.type === 'requestScrollSync') {
+        this.handleScrollRequest(context.document, message.payload.fraction);
+      }
+    });
 
     const disposable = panel.onDidDispose(() => {
       this.logger.info(`Translation preview disposed for ${key}.`);
@@ -143,7 +153,15 @@ export class TranslationPreviewManager implements vscode.Disposable {
 
     if (cached) {
       this.logger.info(`Serving translation for ${key} from cache.`);
-      panel.webview.html = this.renderResultHtml(cached, context);
+      this.postMessage(panel, {
+        type: 'translationResult',
+        payload: {
+          markdown: cached.markdown,
+          providerId: cached.providerId,
+          latencyMs: cached.latencyMs,
+          targetLanguage: context.resolvedConfig.targetLanguage,
+        },
+      });
       return;
     }
 
@@ -156,7 +174,14 @@ export class TranslationPreviewManager implements vscode.Disposable {
     }
     this.abortControllers.set(key, controller);
 
-    panel.webview.html = this.renderLoadingHtml(context);
+    this.postMessage(panel, {
+      type: 'setLoading',
+      payload: {
+        isLoading: true,
+        documentPath: vscode.workspace.asRelativePath(context.document.uri),
+        targetLanguage: context.resolvedConfig.targetLanguage,
+      },
+    });
 
     try {
       const result = await this.translationService.translateDocument({
@@ -171,7 +196,15 @@ export class TranslationPreviewManager implements vscode.Disposable {
       }
 
       panel.title = this.buildTitle(context.document);
-      panel.webview.html = this.renderResultHtml(result, context);
+      this.postMessage(panel, {
+        type: 'translationResult',
+        payload: {
+          markdown: result.markdown,
+          providerId: result.providerId,
+          latencyMs: result.latencyMs,
+          targetLanguage: context.resolvedConfig.targetLanguage,
+        },
+      });
   this.cache.set(context.document, context.resolvedConfig, result);
     } catch (error) {
       if (error instanceof vscode.CancellationError) {
@@ -180,7 +213,13 @@ export class TranslationPreviewManager implements vscode.Disposable {
       }
 
       this.logger.error('Failed to render translation preview.', error);
-      panel.webview.html = this.renderErrorHtml(error);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.postMessage(panel, {
+        type: 'translationError',
+        payload: {
+          message,
+        },
+      });
     } finally {
       const storedController = this.abortControllers.get(key);
       if (storedController === controller) {
@@ -194,147 +233,24 @@ export class TranslationPreviewManager implements vscode.Disposable {
     return `Translated: ${relativePath}`;
   }
 
-  private renderLoadingHtml(context: RenderContext): string {
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Loading translation</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #111827;
-      color: #e5e7eb;
-    }
-    .card {
-      padding: 24px;
-      border-radius: 12px;
-      background: rgba(17, 24, 39, 0.85);
-      border: 1px solid rgba(59, 130, 246, 0.4);
-      box-shadow: 0 20px 45px rgba(15, 23, 42, 0.45);
-    }
-    h1 {
-      font-size: 1.25rem;
-      margin-bottom: 12px;
-      color: #93c5fd;
-    }
-    p {
-      margin: 0;
-      opacity: 0.85;
-    }
-  </style>
-</head>
-<body>
-  <section class="card">
-    <h1>Translating…</h1>
-    <p>${vscode.workspace.asRelativePath(context.document.uri)}</p>
-    <p>Target language: ${context.resolvedConfig.targetLanguage}</p>
-  </section>
-</body>
-</html>`;
+  private postMessage(panel: vscode.WebviewPanel, message: HostToWebviewMessage): void {
+    panel.webview.postMessage(message).then(
+      undefined,
+      (error) => this.logger.error('Failed to post message to translation webview.', error),
+    );
   }
 
-  private renderResultHtml(result: TranslationResult, context: RenderContext): string {
-  const escapedMarkdown = escapeHtml(result.markdown);
+  private handleScrollRequest(document: vscode.TextDocument, fraction: number): void {
+    const editor = vscode.window.visibleTextEditors.find((candidate) => candidate.document === document);
 
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Translated Markdown</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 32px 24px;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #0f172a;
-      color: #e2e8f0;
+    if (!editor) {
+      return;
     }
-    header {
-      margin-bottom: 24px;
-    }
-    pre {
-      background: #1e293b;
-      border-radius: 8px;
-      padding: 20px;
-      overflow-x: auto;
-      box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.2);
-    }
-    code {
-      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-      line-height: 1.6;
-      font-size: 0.95rem;
-      color: #f8fafc;
-    }
-    footer {
-      margin-top: 16px;
-      font-size: 0.8rem;
-      color: #94a3b8;
-    }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Translated Markdown Preview</h1>
-    <p>Provider: ${result.providerId} · Target: ${context.resolvedConfig.targetLanguage} · Latency: ${result.latencyMs}ms</p>
-  </header>
-  <pre><code>${escapedMarkdown}</code></pre>
-  <footer>Source: ${vscode.workspace.asRelativePath(context.document.uri)}</footer>
-</body>
-</html>`;
-  }
 
-  private renderErrorHtml(error: unknown): string {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Translation Error</title>
-  <style>
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #1f2937;
-      color: #fecaca;
-      text-align: center;
-    }
-    section {
-      padding: 24px;
-      max-width: 420px;
-      background: rgba(127, 29, 29, 0.25);
-      border-radius: 10px;
-      border: 1px solid rgba(248, 113, 113, 0.35);
-    }
-    h1 {
-      margin-bottom: 12px;
-      font-size: 1.25rem;
-    }
-    p {
-      margin: 0;
-      word-break: break-word;
-    }
-  </style>
-</head>
-<body>
-  <section>
-    <h1>Translation failed</h1>
-    <p>${message}</p>
-  </section>
-</body>
-</html>`;
+    const lastLine = Math.max(editor.document.lineCount - 1, 0);
+    const targetLine = Math.min(Math.floor(lastLine * fraction), lastLine);
+    const position = new vscode.Position(targetLine, 0);
+    const range = new vscode.Range(position, position);
+    editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
   }
 }
