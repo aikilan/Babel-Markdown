@@ -6,8 +6,10 @@ import { createConfigureTranslationApiKeyCommand } from '../commands/configureTr
 import { createOpenTranslationPreviewCommand } from '../commands/openTranslationPreview';
 import { createRefreshTranslationPreviewCommand } from '../commands/refreshTranslationPreview';
 import { MarkdownPreviewPanel } from '../panel/MarkdownPreviewPanel';
+import { TranslationPreviewManager } from '../panel/TranslationPreviewManager';
 import { BabelMarkdownService } from '../services/BabelMarkdownService';
 import { SecretStorageService } from '../services/SecretStorageService';
+import { TranslationService } from '../services/TranslationService';
 import { ExtensionLogger } from '../utils/logger';
 
 export function registerCommands(context: vscode.ExtensionContext): vscode.Disposable[] {
@@ -15,8 +17,14 @@ export function registerCommands(context: vscode.ExtensionContext): vscode.Dispo
   const service = new BabelMarkdownService(logger);
   const previewPanel = new MarkdownPreviewPanel(context.extensionUri, service, logger);
   const secretStorageService = new SecretStorageService(context.secrets, logger);
+  const translationService = new TranslationService(logger);
+  const translationPreviewManager = new TranslationPreviewManager(
+    context.extensionUri,
+    translationService,
+    logger,
+  );
 
-  context.subscriptions.push(logger, previewPanel);
+  context.subscriptions.push(logger, previewPanel, translationPreviewManager);
 
   return [
     vscode.commands.registerCommand(
@@ -29,11 +37,15 @@ export function registerCommands(context: vscode.ExtensionContext): vscode.Dispo
     ),
     vscode.commands.registerCommand(
       'babelMdViewer.openTranslationPreview',
-      createOpenTranslationPreviewCommand(logger),
+      createOpenTranslationPreviewCommand(translationPreviewManager, secretStorageService, logger),
     ),
     vscode.commands.registerCommand(
       'babelMdViewer.refreshTranslationPreview',
-      createRefreshTranslationPreviewCommand(logger),
+      createRefreshTranslationPreviewCommand(
+        translationPreviewManager,
+        secretStorageService,
+        logger,
+      ),
     ),
     vscode.commands.registerCommand(
       'babelMdViewer.configureTranslationApiKey',
