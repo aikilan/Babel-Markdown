@@ -11,6 +11,7 @@ interface PreviewEntry {
   panel: vscode.WebviewPanel;
   disposable: vscode.Disposable;
   lastVersion: number;
+  rangeSubscription?: vscode.Disposable;
 }
 
 interface RenderContext {
@@ -52,6 +53,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
     for (const preview of this.previews.values()) {
       preview.panel.dispose();
       preview.disposable.dispose();
+      preview.rangeSubscription?.dispose();
     }
     this.previews.clear();
 
@@ -67,6 +69,8 @@ export class TranslationPreviewManager implements vscode.Disposable {
 
     if (existing) {
       existing.panel.reveal(undefined, true);
+      this.registerScrollListener(key, context.document);
+      this.postVisibleRange(existing.panel, context.document);
       await this.render(existing.panel, context);
       return;
     }
@@ -79,9 +83,11 @@ export class TranslationPreviewManager implements vscode.Disposable {
         enableScripts: true,
         retainContextWhenHidden: true,
         enableCommandUris: false,
+        localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview')],
       },
     );
 
+    panel.webview.html = this.getWebviewHtml(panel.webview);
     panel.iconPath = vscode.Uri.joinPath(this.extensionUri, 'assets', 'icons', 'preview.svg');
     panel.webview.onDidReceiveMessage((message: WebviewToHostMessage) => {
       if (message.type === 'log') {
@@ -96,6 +102,8 @@ export class TranslationPreviewManager implements vscode.Disposable {
 
     const disposable = panel.onDidDispose(() => {
       this.logger.info(`Translation preview disposed for ${key}.`);
+      const entry = this.previews.get(key);
+      entry?.rangeSubscription?.dispose();
       this.previews.delete(key);
       disposable.dispose();
       const controller = this.abortControllers.get(key);
@@ -105,11 +113,15 @@ export class TranslationPreviewManager implements vscode.Disposable {
       }
     });
 
-    this.previews.set(key, {
+    const entry: PreviewEntry = {
       panel,
       disposable,
       lastVersion: context.document.version,
-    });
+    };
+
+    this.previews.set(key, entry);
+    this.registerScrollListener(key, context.document);
+    this.postVisibleRange(panel, context.document);
 
     await this.render(panel, context, { force: true });
   }
@@ -205,7 +217,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
           targetLanguage: context.resolvedConfig.targetLanguage,
         },
       });
-  this.cache.set(context.document, context.resolvedConfig, result);
+      this.cache.set(context.document, context.resolvedConfig, result);
     } catch (error) {
       if (error instanceof vscode.CancellationError) {
         this.logger.warn(`Translation request cancelled for ${key}.`);
@@ -233,11 +245,153 @@ export class TranslationPreviewManager implements vscode.Disposable {
     return `Translated: ${relativePath}`;
   }
 
+  private getWebviewHtml(webview: vscode.Webview): string {
+    const scriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'translationPreview.js'),
+    );
+    const nonce = this.createNonce();
+    const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="${csp}" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Translation Preview</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: var(--vscode-editor-background);
+      color: var(--vscode-editor-foreground);
+    }
+
+    main {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px 20px 48px;
+      min-height: 100vh;
+      box-sizing: border-box;
+    }
+
+    .preview__status {
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .preview__error {
+      margin: 0;
+      padding: 12px 16px;
+      border-radius: 6px;
+      background: var(--vscode-inputValidation-errorBackground);
+      color: var(--vscode-inputValidation-errorForeground);
+      border: 1px solid var(--vscode-inputValidation-errorBorder);
+    }
+
+    .preview__content {
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    a {
+      color: var(--vscode-textLink-foreground);
+    }
+
+    code, pre {
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <p id="preview-status" class="preview__status" role="status" aria-live="polite"></p>
+    <div id="preview-error" class="preview__error" role="alert" hidden></div>
+    <article id="preview-content" class="preview__content" aria-label="Translated Markdown"></article>
+  </main>
+  <script nonce="${nonce}" src="${scriptUri}"></script>
+</body>
+</html>`;
+  }
+
+  private createNonce(): string {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const length = 16;
+    let result = '';
+    for (let i = 0; i < length; i += 1) {
+      const index = Math.floor(Math.random() * possible.length);
+      result += possible.charAt(index);
+    }
+    return result;
+  }
+
   private postMessage(panel: vscode.WebviewPanel, message: HostToWebviewMessage): void {
     panel.webview.postMessage(message).then(
       undefined,
       (error) => this.logger.error('Failed to post message to translation webview.', error),
     );
+  }
+
+  private registerScrollListener(key: string, document: vscode.TextDocument): void {
+    const preview = this.previews.get(key);
+
+    preview?.rangeSubscription?.dispose();
+
+    if (!preview) {
+      return;
+    }
+
+    const subscription = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
+      if (event.textEditor.document !== document) {
+        return;
+      }
+
+      const visibleRange = event.visibleRanges[0];
+
+      if (!visibleRange) {
+        return;
+      }
+
+      this.postMessage(preview.panel, {
+        type: 'scrollSync',
+        payload: {
+          line: visibleRange.start.line,
+          totalLines: document.lineCount,
+        },
+      });
+    });
+
+    preview.rangeSubscription = subscription;
+  }
+
+  private postVisibleRange(panel: vscode.WebviewPanel, document: vscode.TextDocument): void {
+    const editor = vscode.window.visibleTextEditors.find((candidate) => candidate.document === document);
+
+    if (!editor) {
+      return;
+    }
+
+    const visibleRange = editor.visibleRanges[0];
+
+    if (!visibleRange) {
+      return;
+    }
+
+    this.postMessage(panel, {
+      type: 'scrollSync',
+      payload: {
+        line: visibleRange.start.line,
+        totalLines: document.lineCount,
+      },
+    });
   }
 
   private handleScrollRequest(document: vscode.TextDocument, fraction: number): void {
