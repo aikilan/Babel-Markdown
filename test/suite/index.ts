@@ -5,7 +5,13 @@ import * as vscode from 'vscode';
 import { SecretStorageService } from '../../src/services/SecretStorageService';
 import { BabelMarkdownService } from '../../src/services/BabelMarkdownService';
 import { TranslationCache } from '../../src/services/TranslationCache';
-import type { TranslationConfiguration } from '../../src/types/config';
+import { TranslationService } from '../../src/services/TranslationService';
+import type { OpenAITranslationClient } from '../../src/services/OpenAITranslationClient';
+import type { ExtensionConfiguration, TranslationConfiguration } from '../../src/types/config';
+import type {
+  RawTranslationResult,
+  ResolvedTranslationConfiguration,
+} from '../../src/types/translation';
 import { getExtensionConfiguration } from '../../src/utils/config';
 import { ExtensionLogger } from '../../src/utils/logger';
 
@@ -236,6 +242,88 @@ suite('Babel Markdown Service', () => {
     const result = await service.transformDocument(document);
 
     assert.strictEqual(result.html.includes('&lt;world&gt;'), true);
+    logger.dispose();
+  });
+});
+
+suite('TranslationService', () => {
+  const configuration: ExtensionConfiguration = {
+    previewTheme: 'light',
+    transformPlugins: [],
+    translation: {
+      apiBaseUrl: 'https://example.com',
+      apiKey: 'sk-test',
+      model: 'gpt-test',
+      targetLanguage: 'de',
+      timeoutMs: 1000,
+    },
+  };
+
+  const resolvedConfig: ResolvedTranslationConfiguration = {
+    apiBaseUrl: configuration.translation.apiBaseUrl,
+    apiKey: 'sk-test',
+    model: configuration.translation.model,
+    targetLanguage: configuration.translation.targetLanguage,
+    timeoutMs: configuration.translation.timeoutMs,
+  };
+
+  test('returns rendered html alongside markdown result', async () => {
+    const logger = new ExtensionLogger('Babel MD Viewer (Translation Test)');
+    const stubResponse: RawTranslationResult = {
+      markdown: '**Hello** <script>alert(1)</script>',
+      providerId: 'stub-provider',
+      latencyMs: 12,
+    };
+
+    const client: Partial<OpenAITranslationClient> = {
+      translate: async (): Promise<RawTranslationResult> => stubResponse,
+    };
+
+    const service = new TranslationService(logger, client as OpenAITranslationClient);
+    const document = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: '# Source',
+    });
+
+    const result = await service.translateDocument({
+      document,
+      configuration,
+      resolvedConfig,
+    });
+
+    assert.strictEqual(result.markdown, stubResponse.markdown);
+    assert.strictEqual(result.providerId, stubResponse.providerId);
+    assert.strictEqual(result.latencyMs, stubResponse.latencyMs);
+    assert.ok(result.html.includes('<strong>Hello</strong>'));
+    assert.ok(!result.html.includes('<script'));
+
+    logger.dispose();
+  });
+
+  test('returns sanitized fallback html on error', async () => {
+    const logger = new ExtensionLogger('Babel MD Viewer (Translation Error Test)');
+    const client: Partial<OpenAITranslationClient> = {
+      translate: async (): Promise<RawTranslationResult> => {
+        throw new Error('boom');
+      },
+    };
+
+    const service = new TranslationService(logger, client as OpenAITranslationClient);
+    const document = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: 'Source <script>alert(1)</script>',
+    });
+
+    const result = await service.translateDocument({
+      document,
+      configuration,
+      resolvedConfig,
+    });
+
+    assert.strictEqual(result.providerId, 'error-fallback');
+    assert.ok(result.html.includes('Translation failed'));
+    assert.ok(!result.html.includes('<script>'));
+
     logger.dispose();
   });
 });
