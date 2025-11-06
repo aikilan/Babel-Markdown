@@ -12,8 +12,8 @@ const translations = {
     'zh-cn': '没有可预览的活动编辑器。',
   },
   'command.openPreview.unsupported': {
-    en: 'Babel MD Viewer only supports Markdown files.',
-    'zh-cn': 'Babel MD Viewer 仅支持 Markdown 文件。',
+    en: 'Only supports Markdown files.',
+    'zh-cn': '仅支持 Markdown 文件。',
   },
   'command.openPreview.failure': {
     en: 'Unable to open Babel Markdown preview. Check logs.',
