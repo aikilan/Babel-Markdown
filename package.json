@@ -129,7 +129,7 @@
         },
         "babelMdViewer.translation.concurrencyLimit": {
           "type": "number",
-          "default": 1,
+          "default": 2,
           "minimum": 1,
           "markdownDescription": "%config.translation.concurrencyLimit.markdownDescription%"
         },

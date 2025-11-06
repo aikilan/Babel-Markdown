@@ -294,6 +294,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
           totalSegments: update.totalSegments,
           latencyMs: update.latencyMs,
           providerId: update.providerId,
+          wasCached: update.wasCached,
         });
 
         this.postMessage(panel, {
@@ -307,6 +308,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
             latencyMs: update.latencyMs,
             targetLanguage: context.resolvedConfig.targetLanguage,
             documentPath,
+            wasCached: update.wasCached,
           },
         });
       };
@@ -317,6 +319,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
           configuration: context.configuration,
           resolvedConfig: context.resolvedConfig,
           signal: controller.signal,
+          cache: this.cache,
         },
         { onPlan, onSegment },
       );
@@ -356,8 +359,8 @@ export class TranslationPreviewManager implements vscode.Disposable {
         return;
       }
 
-      this.logger.error(`Failed to render translation preview for ${documentPath}.`, error);
-  const message = error instanceof Error ? error.message : localize('common.unknownError');
+    this.logger.error(`Failed to render translation preview for ${documentPath}.`, error);
+    const message = error instanceof Error ? error.message : localize('common.unknownError');
       const interpretation = this.interpretError(message, {
         documentPath,
         targetLanguage: context.resolvedConfig.targetLanguage,
@@ -551,6 +554,11 @@ export class TranslationPreviewManager implements vscode.Disposable {
 
     .preview__chunk--source {
       opacity: 0.65;
+    }
+
+    .preview__chunk--cached {
+      border-left: 3px solid var(--vscode-terminal-ansiGreen, #4caf50);
+      padding-left: 12px;
     }
 
     a {

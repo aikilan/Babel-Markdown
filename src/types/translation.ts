@@ -15,3 +15,7 @@ export interface RawTranslationResult {
 export interface TranslationResult extends RawTranslationResult {
   html: string;
 }
+
+export interface CachedSegmentResult extends RawTranslationResult {
+  fingerprint: string;
+}

@@ -262,6 +262,7 @@ let suppressTimer: number | undefined;
 function appendChunk(
   payload: Extract<HostToWebviewMessage, { type: 'translationChunk' }>['payload'],
 ): void {
+  const wasCached = Boolean(payload.wasCached);
   completedSegments = Math.max(completedSegments, payload.segmentIndex + 1);
   totalSegments = Math.max(totalSegments, payload.totalSegments);
 
@@ -273,10 +274,20 @@ function appendChunk(
     existing.innerHTML = payload.html;
     existing.classList.remove('preview__chunk--source');
     existing.classList.add('preview__chunk--translated');
+    existing.dataset.cached = wasCached ? 'true' : 'false';
+    if (wasCached) {
+      existing.classList.add('preview__chunk--cached');
+    } else {
+      existing.classList.remove('preview__chunk--cached');
+    }
   } else {
     const wrapper = document.createElement('section');
     wrapper.className = 'preview__chunk preview__chunk--translated';
     wrapper.dataset.chunkIndex = payload.segmentIndex.toString();
+    wrapper.dataset.cached = wasCached ? 'true' : 'false';
+    if (wasCached) {
+      wrapper.classList.add('preview__chunk--cached');
+    }
     wrapper.innerHTML = payload.html;
     outputContainer.appendChild(wrapper);
   }

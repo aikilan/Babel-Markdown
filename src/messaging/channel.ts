@@ -52,6 +52,7 @@ export type HostToWebviewMessage =
         latencyMs: number;
         documentPath: string;
         targetLanguage: string;
+        wasCached: boolean;
       };
     }
   | {

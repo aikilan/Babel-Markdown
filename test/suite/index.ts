@@ -271,6 +271,36 @@ suite('TranslationCache', () => {
     assert.strictEqual(cachedA, undefined);
     assert.deepStrictEqual(cachedB, resultB);
   });
+
+  test('stores and retrieves segment cache entries', () => {
+    const cache = new TranslationCache({ ttlMs: 1000, maxEntries: 2 });
+    const doc = new InMemoryTextDocument(vscode.Uri.parse('file:///doc.md'), 1);
+    const config: ResolvedTranslationConfiguration = {
+      apiBaseUrl: 'https://example.com',
+      apiKey: 'sk-example',
+      model: 'gpt-test',
+      targetLanguage: 'en',
+      timeoutMs: 1000,
+    };
+
+    const segment = 'Segment content.';
+    const result: RawTranslationResult = {
+      markdown: 'cached translation',
+      providerId: 'mock',
+      latencyMs: 12,
+    };
+
+    cache.setSegment(doc, config, segment, result);
+
+    const hit = cache.getSegment(doc, config, segment);
+    assert.ok(hit);
+    assert.strictEqual(hit?.markdown, result.markdown);
+    assert.strictEqual(hit?.providerId, result.providerId);
+
+    cache.clearForDocument(doc);
+    const afterClear = cache.getSegment(doc, config, segment);
+    assert.strictEqual(afterClear, undefined);
+  });
 });
 
 suite('Babel Markdown Service', () => {
@@ -600,6 +630,74 @@ suite('TranslationService', () => {
     assert.strictEqual(result.markdown.includes('final-0'), true);
     assert.strictEqual(result.markdown.includes('final-1'), true);
     assert.strictEqual(result.markdown.includes('final-2'), true);
+
+    logger.dispose();
+  });
+
+  test('segment cache prevents repeated provider calls', async () => {
+    const logger = new ExtensionLogger('Babel MD Viewer (Segment Cache Test)');
+    const cache = new TranslationCache({ ttlMs: 1000 });
+    let callCount = 0;
+
+    const client: Partial<OpenAITranslationClient> = {
+      translate: async ({ documentText }: TranslateRequest): Promise<RawTranslationResult> => {
+        callCount += 1;
+        return {
+          markdown: `cached-${documentText}`,
+          providerId: 'stub-provider',
+          latencyMs: 2,
+        };
+      },
+    };
+
+    const cachedConfiguration: ExtensionConfiguration = {
+      ...configuration,
+      translation: {
+        ...configuration.translation,
+        concurrencyLimit: 2,
+      },
+    };
+
+    const service = new TranslationService(logger, client as OpenAITranslationClient);
+    const document = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: 'Cache me first.\n\nCache me second.',
+    });
+
+    await service.translateDocument(
+      {
+        document,
+        configuration: cachedConfiguration,
+        resolvedConfig,
+        cache,
+      },
+      {
+        onSegment: () => undefined,
+      },
+    );
+
+    assert.strictEqual(callCount, 2);
+
+    const cachedSegments: Array<{ index: number; wasCached: boolean }> = [];
+    await service.translateDocument(
+      {
+        document,
+        configuration: cachedConfiguration,
+        resolvedConfig,
+        cache,
+      },
+      {
+        onSegment: (update) => {
+          cachedSegments.push({ index: update.segmentIndex, wasCached: update.wasCached });
+        },
+      },
+    );
+
+    assert.strictEqual(callCount, 2);
+    assert.deepStrictEqual(cachedSegments, [
+      { index: 0, wasCached: true },
+      { index: 1, wasCached: true },
+    ]);
 
     logger.dispose();
   });

@@ -7,6 +7,7 @@ import type {
   TranslationResult,
 } from '../types/translation';
 import { OpenAITranslationClient } from './OpenAITranslationClient';
+import { TranslationCache } from './TranslationCache';
 import { ExtensionLogger } from '../utils/logger';
 import { renderMarkdownToHtml } from '../utils/markdown';
 
@@ -15,6 +16,7 @@ export interface TranslationRequestContext {
   configuration: ExtensionConfiguration;
   resolvedConfig: ResolvedTranslationConfiguration;
   signal?: AbortSignal;
+  cache?: TranslationCache;
 }
 
 export interface TranslationSegmentUpdate {
@@ -24,6 +26,7 @@ export interface TranslationSegmentUpdate {
   html: string;
   latencyMs: number;
   providerId: string;
+  wasCached: boolean;
 }
 
 export interface TranslationHandlers {
@@ -307,6 +310,7 @@ export class TranslationService {
         html: string;
         latencyMs: number;
         providerId: string;
+        wasCached: boolean;
       }
     >();
     let aggregateLatency = 0;
@@ -314,19 +318,45 @@ export class TranslationService {
     let nextIndex = 0;
     let flushIndex = 0;
     let capturedError: unknown;
+    const cachedIndices = new Set<number>();
+
+    if (context.cache) {
+      for (let index = 0; index < totalSegments; index += 1) {
+        const segment = segments[index];
+        const cached = context.cache.getSegment(context.document, context.resolvedConfig, segment);
+
+        if (!cached) {
+          continue;
+        }
+
+        cachedIndices.add(index);
+        pending.set(index, {
+          markdown: cached.markdown,
+          html: renderMarkdownToHtml(cached.markdown),
+          latencyMs: cached.latencyMs,
+          providerId: cached.providerId,
+          wasCached: true,
+        });
+      }
+    }
 
     const takeNextIndex = (): number | undefined => {
-      if (capturedError) {
-        return undefined;
+      while (nextIndex < totalSegments) {
+        if (capturedError) {
+          return undefined;
+        }
+
+        if (cachedIndices.has(nextIndex)) {
+          nextIndex += 1;
+          continue;
+        }
+
+        const index = nextIndex;
+        nextIndex += 1;
+        return index;
       }
 
-      if (nextIndex >= totalSegments) {
-        return undefined;
-      }
-
-      const index = nextIndex;
-      nextIndex += 1;
-      return index;
+      return undefined;
     };
 
     const flush = () => {
@@ -345,11 +375,24 @@ export class TranslationService {
           html: entry.html,
           latencyMs: entry.latencyMs,
           providerId: entry.providerId,
+          wasCached: entry.wasCached,
         });
 
         flushIndex += 1;
       }
     };
+
+    flush();
+
+    const remainingSegments = totalSegments - cachedIndices.size;
+    if (remainingSegments === 0) {
+      const markdown = combinedMarkdown.map((chunk) => chunk ?? '').join('\n\n');
+      return {
+        markdown,
+        providerId: providerId ?? context.resolvedConfig.model,
+        latencyMs: aggregateLatency,
+      };
+    }
 
     const worker = async (): Promise<void> => {
       while (true) {
@@ -380,11 +423,19 @@ export class TranslationService {
             throw new vscode.CancellationError();
           }
 
+          context.cache?.setSegment(
+            context.document,
+            context.resolvedConfig,
+            segment,
+            segmentResult,
+          );
+
           pending.set(index, {
             markdown: segmentResult.markdown,
             html: renderMarkdownToHtml(segmentResult.markdown),
             latencyMs: segmentResult.latencyMs,
             providerId: segmentResult.providerId,
+            wasCached: false,
           });
 
           flush();
@@ -395,7 +446,7 @@ export class TranslationService {
       }
     };
 
-    const workers = Array.from({ length: effectiveConcurrency }, () => worker());
+    const workers = Array.from({ length: Math.min(effectiveConcurrency, remainingSegments) }, () => worker());
     await Promise.all(workers);
 
     if (capturedError) {
