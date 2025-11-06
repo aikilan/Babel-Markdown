@@ -3,8 +3,12 @@
   "displayName": "Babel Markdown Viewer",
   "description": "Preview Markdown files transformed with Babel-style pipelines inside VS Code.",
   "publisher": "your-name",
-  "version": "0.0.1",
+  "version": "0.0.4",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-name/babel-md-viewer"
+  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -13,11 +17,6 @@
   ],
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onCommand:babelMdViewer.openPreview",
-    "onCommand:babelMdViewer.refreshPreview",
-    "onCommand:babelMdViewer.openTranslationPreview",
-    "onCommand:babelMdViewer.refreshTranslationPreview",
-    "onCommand:babelMdViewer.configureTranslationApiKey",
     "onLanguage:markdown"
   ],
   "contributes": {
@@ -120,8 +119,13 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p tsconfig.json",
+  "vscode:prepublish": "pnpm run build",
+  "typecheck": "tsc -p tsconfig.json --noEmit",
+  "build:extension": "vite build --config vite.config.extension.mjs",
+  "build:webview": "vite build --config vite.config.webview.mjs",
+  "build": "pnpm run typecheck && pnpm run build:extension && pnpm run build:webview",
+  "compile": "pnpm run build",
+  "package": "pnpm run build && pnpm exec vsce package --no-dependencies",
     "compile-tests": "tsc -p tsconfig.test.json",
     "watch": "tsc -watch -p tsconfig.json",
     "watch-tests": "tsc -watch -p tsconfig.test.json",
@@ -144,7 +148,8 @@
     "eslint-plugin-import": "^2.29.1",
     "mocha": "^10.2.0",
     "prettier": "^3.2.5",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vite": "^7.2.0"
   },
   "dependencies": {
     "markdown-it": "^14.1.0",

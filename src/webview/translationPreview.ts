@@ -15,7 +15,7 @@ const statusElement = document.getElementById('preview-status');
 const errorElement = document.getElementById('preview-error');
 const retryElement = document.getElementById('preview-retry');
 
-if (!(outputElement instanceof HTMLDivElement)) {
+if (!(outputElement instanceof HTMLElement)) {
   throw new Error('Translation preview DOM failed to initialize: preview-content.');
 }
 

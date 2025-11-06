@@ -1,0 +1,15 @@
+# Exclude build sources; only ship bundled output
+src/**
+test/**
+dist-test/**
+.vscode/**
+.idea/**
+docs/**
+scripts/**
+*.vsix
+pnpm-lock.yaml
+pnpm-workspace.yaml
+node_modules/**
+tmp_vsix/**
+
+!dist/**
