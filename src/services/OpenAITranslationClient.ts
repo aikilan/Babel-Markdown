@@ -35,8 +35,8 @@ export class OpenAITranslationClient {
   constructor(private readonly logger: ExtensionLogger, private readonly maxRetries = 2) {}
 
   async translate(request: TranslateRequest): Promise<RawTranslationResult> {
-    const { resolvedConfig, documentText, fileName, signal } = request;
-    const url = `${resolvedConfig.apiBaseUrl.replace(/\/$/, '')}/chat/completions`;
+  const { resolvedConfig, documentText, fileName, signal } = request;
+  const url = this.buildEndpointUrl(resolvedConfig.apiBaseUrl);
     const prompt = this.buildPrompt(documentText, resolvedConfig.targetLanguage, fileName);
 
     let attempt = 0;
@@ -55,6 +55,7 @@ export class OpenAITranslationClient {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${resolvedConfig.apiKey}`,
+            'api-key': resolvedConfig.apiKey,
           },
           body: JSON.stringify({
             model: resolvedConfig.model,
@@ -128,6 +129,16 @@ ${markdown}`;
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
     ];
+  }
+
+  private buildEndpointUrl(apiBaseUrl: string): string {
+    const trimmed = apiBaseUrl.replace(/\/+$/, '');
+
+    if (/\/chat\/completions$/i.test(trimmed)) {
+      return trimmed;
+    }
+
+    return `${trimmed}/chat/completions`;
   }
 
   private combineSignals(signalA?: AbortSignal, signalB?: AbortSignal): AbortSignal | undefined {

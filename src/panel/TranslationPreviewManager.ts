@@ -235,7 +235,9 @@ export class TranslationPreviewManager implements vscode.Disposable {
       return;
     }
 
-    this.logger.info(`Rendering translation preview for ${key}.`);
+    this.logger.info(
+      `Rendering translation preview for ${documentPath} → ${context.resolvedConfig.targetLanguage} (v${context.document.version}).`,
+    );
     this.logger.event('translation.fetchStarted', requestMeta);
 
     const controller = new AbortController();
@@ -287,6 +289,9 @@ export class TranslationPreviewManager implements vscode.Disposable {
         latencyMs: result.latencyMs,
         wasCached: false,
       });
+      this.logger.info(
+        `Translation succeeded for ${documentPath} → ${context.resolvedConfig.targetLanguage} using ${result.providerId} in ${result.latencyMs}ms.`,
+      );
     } catch (error) {
       if (error instanceof vscode.CancellationError) {
         this.logger.warn(`Translation request cancelled for ${key}.`);
@@ -294,7 +299,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
         return;
       }
 
-      this.logger.error('Failed to render translation preview.', error);
+      this.logger.error(`Failed to render translation preview for ${documentPath}.`, error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       const interpretation = this.interpretError(message, {
         documentPath,

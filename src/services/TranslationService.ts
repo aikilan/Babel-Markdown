@@ -7,7 +7,6 @@ import type {
   TranslationResult,
 } from '../types/translation';
 import { OpenAITranslationClient } from './OpenAITranslationClient';
-import { escapeHtml } from '../utils/text';
 import { ExtensionLogger } from '../utils/logger';
 import { renderMarkdownToHtml } from '../utils/markdown';
 
@@ -61,15 +60,7 @@ export class TranslationService {
 
       this.logger.error('Translation service failed.', error);
 
-      const escaped = escapeHtml(text);
-      const markdown = `> **Translation failed**  \
-> Target language: ${context.resolvedConfig.targetLanguage}\n\n${escaped}`;
-
-      return this.composeResult({
-        markdown,
-        providerId: 'error-fallback',
-        latencyMs: 0,
-      });
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 
