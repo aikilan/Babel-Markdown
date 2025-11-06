@@ -1,0 +1,18 @@
+{
+  "extension.displayName": "Babel Markdown 查看器",
+  "extension.description": "在 VS Code 中通过 Babel 风格的管线预览 Markdown 文件。",
+  "command.openPreview.title": "Babel MD Viewer：打开预览",
+  "command.refreshPreview.title": "Babel MD Viewer：刷新预览",
+  "command.openTranslationPreview.title": "Babel MD Viewer：打开翻译预览",
+  "command.refreshTranslationPreview.title": "Babel MD Viewer：刷新翻译预览",
+  "command.configureTranslationApiKey.title": "Babel MD Viewer：设置翻译 API 密钥",
+  "command.category": "Babel MD Viewer",
+  "configuration.title": "Babel MD Viewer",
+  "config.previewTheme.description": "选择预览 Webview 的主题。",
+  "config.transformPlugins.description": "在渲染 Markdown 之前应用的 Babel 插件列表。",
+  "config.translation.apiBaseUrl.markdownDescription": "OpenAI 兼容翻译端点的基础 URL。",
+  "config.translation.apiKey.markdownDescription": "翻译请求使用的 API 密钥。建议通过命令面板安全存储，避免提交明文数值。",
+  "config.translation.model.markdownDescription": "翻译请求使用的模型标识符。",
+  "config.translation.targetLanguage.markdownDescription": "翻译后 Markdown 输出的目标语言（例如 `en`、`zh-CN`）。",
+  "config.translation.timeoutMs.markdownDescription": "翻译 API 请求的超时时间（毫秒）。"
+}

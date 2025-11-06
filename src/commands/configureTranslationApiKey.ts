@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import { SecretStorageService } from '../services/SecretStorageService';
 import { getExtensionConfiguration } from '../utils/config';
+import { localize } from '../i18n/localize';
 import { ExtensionLogger } from '../utils/logger';
 
 export function createConfigureTranslationApiKeyCommand(
@@ -15,10 +16,9 @@ export function createConfigureTranslationApiKeyCommand(
     const hasConfigValue = Boolean(configuration.translation.apiKey);
 
     const input = await vscode.window.showInputBox({
-      title: 'Set Translation API Key',
-      prompt:
-        'Enter your OpenAI-compatible API key. Leave empty to clear the stored key. Value is stored securely via VS Code Secret Storage.',
-      placeHolder: 'sk-...your key...',
+      title: localize('command.configureApiKey.title'),
+      prompt: localize('command.configureApiKey.prompt'),
+      placeHolder: localize('command.configureApiKey.placeholder'),
       password: true,
       ignoreFocusOut: true,
       value: '',
@@ -28,7 +28,7 @@ export function createConfigureTranslationApiKeyCommand(
         }
 
         if (!value.trim().startsWith('sk-')) {
-          return 'Expected an OpenAI-style API key starting with "sk-".';
+          return localize('command.configureApiKey.validation');
         }
 
         return null;
@@ -48,7 +48,7 @@ export function createConfigureTranslationApiKeyCommand(
       if (!trimmed) {
         await secrets.clearTranslationApiKey();
         await configurationSection.update('translation.apiKey', undefined, configurationTarget);
-        void vscode.window.showInformationMessage('Translation API key cleared.');
+        void vscode.window.showInformationMessage(localize('command.configureApiKey.cleared'));
         return;
       }
 
@@ -58,10 +58,10 @@ export function createConfigureTranslationApiKeyCommand(
         await configurationSection.update('translation.apiKey', undefined, configurationTarget);
       }
 
-      void vscode.window.showInformationMessage('Translation API key stored securely.');
+      void vscode.window.showInformationMessage(localize('command.configureApiKey.stored'));
     } catch (error) {
       logger.error('Failed to persist translation API key.', error);
-      void vscode.window.showErrorMessage('Unable to store translation API key. Check logs for details.');
+      void vscode.window.showErrorMessage(localize('command.configureApiKey.storeError'));
       return;
     }
 

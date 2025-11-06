@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 
 import { MarkdownPreviewPanel } from '../panel/MarkdownPreviewPanel';
 import { ExtensionLogger } from '../utils/logger';
+import { localize } from '../i18n/localize';
 
 export function createOpenPreviewCommand(
   previewPanel: MarkdownPreviewPanel,
@@ -11,12 +12,12 @@ export function createOpenPreviewCommand(
     const editor = vscode.window.activeTextEditor;
 
     if (!editor) {
-      void vscode.window.showWarningMessage('No active editor to preview.');
+      void vscode.window.showWarningMessage(localize('command.openPreview.noEditor'));
       return;
     }
 
     if (editor.document.languageId !== 'markdown') {
-      void vscode.window.showWarningMessage('Babel MD Viewer only supports Markdown files.');
+      void vscode.window.showWarningMessage(localize('command.openPreview.unsupported'));
       return;
     }
 
@@ -24,7 +25,7 @@ export function createOpenPreviewCommand(
       await previewPanel.show(editor.document);
     } catch (error) {
       logger.error('Failed to open preview panel.', error);
-      void vscode.window.showErrorMessage('Unable to open Babel Markdown preview. Check logs.');
+      void vscode.window.showErrorMessage(localize('command.openPreview.failure'));
     }
   };
 }

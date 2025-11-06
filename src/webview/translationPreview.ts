@@ -6,6 +6,79 @@ declare const acquireVsCodeApi: <T>() => {
   setState(state: unknown): void;
 };
 
+type WebviewLocaleBundle = {
+  languageTag: string;
+  pageTitle: string;
+  retryButtonLabel: string;
+  ariaContentLabel: string;
+  placeholders: {
+    currentDocument: string;
+    configuredLanguage: string;
+  };
+  translations: {
+    statusInProgress: string;
+    progressTemplate: string;
+    statusCompleted: string;
+    statusLastAttempt: string;
+    errorMessage: string;
+  };
+  meta: {
+    cachedLabel: string;
+  };
+};
+
+declare global {
+  interface Window {
+    __babelMdViewerLocale?: WebviewLocaleBundle;
+  }
+}
+
+const FALLBACK_LOCALE: WebviewLocaleBundle = {
+  languageTag: 'en',
+  pageTitle: 'Translation Preview',
+  retryButtonLabel: 'Retry translation',
+  ariaContentLabel: 'Translated Markdown',
+  placeholders: {
+    currentDocument: 'current document',
+    configuredLanguage: 'configured language',
+  },
+  translations: {
+    statusInProgress: 'Translating {document} → {language}{progress}…',
+    progressTemplate: ' ({current}/{total})',
+    statusCompleted: 'Translated {document} → {language} — {meta}',
+    statusLastAttempt: 'Last attempt · {document} → {language}',
+    errorMessage: 'Failed to translate {document} → {language}: {message}{hint}',
+  },
+  meta: {
+    cachedLabel: 'cached',
+  },
+};
+
+const locale: WebviewLocaleBundle =
+  typeof window !== 'undefined' && window.__babelMdViewerLocale
+    ? window.__babelMdViewerLocale
+    : FALLBACK_LOCALE;
+
+function format(template: string, params: Record<string, string | number> = {}): string {
+  return template.replace(/\{(\w+)\}/g, (match, token) => {
+    const value = params[token];
+
+    if (value === undefined || value === null) {
+      return '';
+    }
+
+    return String(value);
+  });
+}
+
+function formatProgress(current: number, total: number): string {
+  if (!Number.isFinite(total) || total <= 0) {
+    return '';
+  }
+
+  return format(locale.translations.progressTemplate, { current, total });
+}
+
 const vscodeApi = (typeof acquireVsCodeApi !== 'undefined'
   ? acquireVsCodeApi()
   : { postMessage: () => undefined, getState: () => undefined, setState: () => undefined });
@@ -36,6 +109,9 @@ const statusContainer = statusElement;
 const errorContainer = errorElement;
 const retryButton = retryElement;
 
+retryButton.textContent = locale.retryButtonLabel;
+outputContainer.setAttribute('aria-label', locale.ariaContentLabel);
+
 function postMessage(message: WebviewToHostMessage): void {
   vscodeApi.postMessage(message);
 }
@@ -53,6 +129,42 @@ function resetStreamingState(): void {
 
 function renderHtml(html: string): void {
   outputContainer.innerHTML = html;
+}
+
+function renderSourceSegments(
+  payload: Extract<HostToWebviewMessage, { type: 'translationSource' }>['payload'],
+): void {
+  resetStreamingState();
+  totalSegments = payload.segments.length;
+  completedSegments = 0;
+  lastDocumentPath = payload.documentPath || lastDocumentPath;
+  lastTargetLanguage = payload.targetLanguage || lastTargetLanguage;
+  errorContainer.hidden = true;
+  retryButton.hidden = true;
+  retryButton.disabled = true;
+
+  outputContainer.innerHTML = '';
+
+  for (const segment of payload.segments) {
+    const section = document.createElement('section');
+    section.className = 'preview__chunk preview__chunk--source';
+    section.dataset.chunkIndex = segment.segmentIndex.toString();
+
+    const pre = document.createElement('pre');
+    pre.textContent = segment.markdown;
+    section.appendChild(pre);
+
+    outputContainer.appendChild(section);
+  }
+
+  const documentLabel = lastDocumentPath || locale.placeholders.currentDocument;
+  const languageLabel = lastTargetLanguage || locale.placeholders.configuredLanguage;
+  statusContainer.dataset.state = 'loading';
+  statusContainer.textContent = format(locale.translations.statusInProgress, {
+    document: documentLabel,
+    language: languageLabel,
+    progress: formatProgress(0, totalSegments),
+  });
 }
 
 function setLoading(
@@ -77,10 +189,13 @@ function setLoading(
       totalSegments = segmentsHint;
     }
     outputContainer.innerHTML = '';
-    const documentLabel = lastDocumentPath || 'current document';
-    const languageLabel = lastTargetLanguage || 'configured language';
-    const segmentLabel = totalSegments > 0 ? ` (0/${totalSegments})` : '';
-    statusContainer.textContent = `Translating ${documentLabel} → ${languageLabel}${segmentLabel}…`;
+    const documentLabel = lastDocumentPath || locale.placeholders.currentDocument;
+    const languageLabel = lastTargetLanguage || locale.placeholders.configuredLanguage;
+    statusContainer.textContent = format(locale.translations.statusInProgress, {
+      document: documentLabel,
+      language: languageLabel,
+      progress: formatProgress(0, totalSegments),
+    });
     retryButton.hidden = true;
     retryButton.disabled = true;
   } else if (!pendingRetry) {
@@ -104,10 +219,16 @@ function renderResult(payload: Extract<HostToWebviewMessage, { type: 'translatio
   ];
 
   if (payload.wasCached) {
-    metaSegments.push('cached');
+    metaSegments.push(locale.meta.cachedLabel);
   }
 
-  statusContainer.textContent = `Translated ${payload.documentPath} → ${payload.targetLanguage} — ${metaSegments.join(' · ')}`;
+  const documentLabel = payload.documentPath || locale.placeholders.currentDocument;
+  const languageLabel = payload.targetLanguage || locale.placeholders.configuredLanguage;
+  statusContainer.textContent = format(locale.translations.statusCompleted, {
+    document: documentLabel,
+    language: languageLabel,
+    meta: metaSegments.join(' · '),
+  });
   renderHtml(payload.html);
 }
 
@@ -115,19 +236,22 @@ function renderError(payload: Extract<HostToWebviewMessage, { type: 'translation
   pendingRetry = false;
   resetStreamingState();
   errorContainer.hidden = false;
-  const messageSegments = [
-    `Failed to translate ${payload.documentPath} → ${payload.targetLanguage}: ${payload.message}`,
-  ];
-
-  if (payload.hint) {
-    messageSegments.push(payload.hint);
-  }
-
-  errorContainer.textContent = messageSegments.join(' ');
+  const documentLabel = payload.documentPath || locale.placeholders.currentDocument;
+  const languageLabel = payload.targetLanguage || locale.placeholders.configuredLanguage;
+  const hintSuffix = payload.hint ? ` ${payload.hint}` : '';
+  errorContainer.textContent = format(locale.translations.errorMessage, {
+    document: documentLabel,
+    language: languageLabel,
+    message: payload.message,
+    hint: hintSuffix,
+  });
   statusContainer.dataset.state = 'idle';
   statusContainer.textContent = payload.hint
     ? `${payload.hint}`
-    : `Last attempt · ${payload.documentPath} → ${payload.targetLanguage}`;
+    : format(locale.translations.statusLastAttempt, {
+        document: documentLabel,
+        language: languageLabel,
+      });
   outputContainer.innerHTML = '';
   retryButton.hidden = false;
   retryButton.disabled = false;
@@ -141,16 +265,30 @@ function appendChunk(
   completedSegments = Math.max(completedSegments, payload.segmentIndex + 1);
   totalSegments = Math.max(totalSegments, payload.totalSegments);
 
-  const wrapper = document.createElement('section');
-  wrapper.className = 'preview__chunk';
-  wrapper.dataset.chunkIndex = payload.segmentIndex.toString();
-  wrapper.innerHTML = payload.html;
-  outputContainer.appendChild(wrapper);
+  const existing = outputContainer.querySelector<HTMLElement>(
+    `[data-chunk-index="${payload.segmentIndex}"]`,
+  );
 
-  const documentLabel = lastDocumentPath || payload.documentPath;
-  const languageLabel = lastTargetLanguage || payload.targetLanguage;
+  if (existing) {
+    existing.innerHTML = payload.html;
+    existing.classList.remove('preview__chunk--source');
+    existing.classList.add('preview__chunk--translated');
+  } else {
+    const wrapper = document.createElement('section');
+    wrapper.className = 'preview__chunk preview__chunk--translated';
+    wrapper.dataset.chunkIndex = payload.segmentIndex.toString();
+    wrapper.innerHTML = payload.html;
+    outputContainer.appendChild(wrapper);
+  }
+
+  const documentLabel = lastDocumentPath || payload.documentPath || locale.placeholders.currentDocument;
+  const languageLabel = lastTargetLanguage || payload.targetLanguage || locale.placeholders.configuredLanguage;
   statusContainer.dataset.state = 'loading';
-  statusContainer.textContent = `Translating ${documentLabel} → ${languageLabel} (${completedSegments}/${totalSegments})…`;
+  statusContainer.textContent = format(locale.translations.statusInProgress, {
+    document: documentLabel,
+    language: languageLabel,
+    progress: formatProgress(completedSegments, totalSegments),
+  });
   retryButton.hidden = true;
   retryButton.disabled = true;
   errorContainer.hidden = true;
@@ -202,6 +340,9 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
     case 'translationError':
       setLoading(false, message.payload.documentPath, message.payload.targetLanguage);
       renderError(message.payload);
+      break;
+    case 'translationSource':
+      renderSourceSegments(message.payload);
       break;
     case 'translationChunk':
       appendChunk(message.payload);

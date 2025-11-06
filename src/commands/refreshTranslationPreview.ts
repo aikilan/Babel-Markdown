@@ -4,6 +4,7 @@ import { TranslationPreviewManager } from '../panel/TranslationPreviewManager';
 import { SecretStorageService } from '../services/SecretStorageService';
 import type { ResolvedTranslationConfiguration } from '../types/translation';
 import { getExtensionConfiguration } from '../utils/config';
+import { localize } from '../i18n/localize';
 import { ExtensionLogger } from '../utils/logger';
 
 export function createRefreshTranslationPreviewCommand(
@@ -15,12 +16,12 @@ export function createRefreshTranslationPreviewCommand(
     const editor = vscode.window.activeTextEditor;
 
     if (!editor) {
-      void vscode.window.showWarningMessage('No active Markdown document to refresh.');
+      void vscode.window.showWarningMessage(localize('command.refreshTranslation.noDocument'));
       return;
     }
 
     if (editor.document.languageId !== 'markdown') {
-      void vscode.window.showWarningMessage('Translation preview is only available for Markdown files.');
+      void vscode.window.showWarningMessage(localize('command.refreshTranslation.onlyMarkdown'));
       return;
     }
 
@@ -30,9 +31,7 @@ export function createRefreshTranslationPreviewCommand(
     const apiKey = secretKey ?? configKey;
 
     if (!apiKey) {
-      void vscode.window.showWarningMessage(
-        'Translation API key not set. Run "Babel MD Viewer: Set Translation API Key" first.',
-      );
+      void vscode.window.showWarningMessage(localize('command.openTranslation.missingKey'));
       return;
     }
 
@@ -52,11 +51,11 @@ export function createRefreshTranslationPreviewCommand(
       });
 
       if (!refreshed) {
-        void vscode.window.showInformationMessage('Open a translation preview before refreshing.');
+        void vscode.window.showInformationMessage(localize('command.refreshTranslation.noPreview'));
       }
     } catch (error) {
       logger.error('Failed to refresh translation preview.', error);
-      void vscode.window.showErrorMessage('Unable to refresh translation preview. Check logs for details.');
+      void vscode.window.showErrorMessage(localize('command.refreshTranslation.failure'));
     }
   };
 }

@@ -26,6 +26,11 @@ export interface TranslationSegmentUpdate {
   providerId: string;
 }
 
+export interface TranslationHandlers {
+  onPlan?: (segments: string[]) => void;
+  onSegment?: (update: TranslationSegmentUpdate) => void;
+}
+
 export class TranslationService {
   constructor(
     private readonly logger: ExtensionLogger,
@@ -34,7 +39,7 @@ export class TranslationService {
 
   async translateDocument(
     context: TranslationRequestContext,
-    handlers?: { onSegment?: (update: TranslationSegmentUpdate) => void },
+    handlers?: TranslationHandlers,
   ): Promise<TranslationResult> {
     const relativePath = vscode.workspace.asRelativePath(context.document.uri);
 
@@ -66,6 +71,8 @@ export class TranslationService {
       });
     }
 
+    handlers?.onPlan?.([...segments]);
+
     const combinedMarkdown: string[] = [];
     let aggregateLatency = 0;
     let providerId: string | undefined;
@@ -84,9 +91,9 @@ export class TranslationService {
           signal: context.signal,
         });
 
-  providerId = segmentResult.providerId;
-  aggregateLatency += segmentResult.latencyMs;
-  combinedMarkdown.push(segmentResult.markdown.trimEnd());
+        providerId = segmentResult.providerId;
+        aggregateLatency += segmentResult.latencyMs;
+        combinedMarkdown.push(segmentResult.markdown.trimEnd());
 
         handlers?.onSegment?.({
           segmentIndex: index,

@@ -31,6 +31,17 @@ export type HostToWebviewMessage =
       };
     }
   | {
+      type: 'translationSource';
+      payload: {
+        documentPath: string;
+        targetLanguage: string;
+        segments: Array<{
+          segmentIndex: number;
+          markdown: string;
+        }>;
+      };
+    }
+  | {
       type: 'translationChunk';
       payload: {
         segmentIndex: number;

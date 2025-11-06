@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 
 import type { BabelMarkdownService, TransformationResult } from '../services/BabelMarkdownService';
+import { getLanguageTag, localize } from '../i18n/localize';
 import { ExtensionLogger } from '../utils/logger';
 
 export class MarkdownPreviewPanel implements vscode.Disposable {
@@ -24,7 +25,9 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
     }
 
     this.currentDocumentUri = document.uri;
-    this.panel.title = `Babel Preview: ${vscode.workspace.asRelativePath(document.uri)}`;
+    this.panel.title = localize('preview.markdownPanelTitle', {
+      document: vscode.workspace.asRelativePath(document.uri),
+    });
     this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Beside, true);
 
     await this.render(document, { force: true });
@@ -56,7 +59,7 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
   private createPanel(): vscode.WebviewPanel {
     const panel = vscode.window.createWebviewPanel(
       'babelMdViewer.preview',
-      'Babel Markdown Preview',
+      localize('preview.markdownWindowTitle'),
       { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
       {
         enableScripts: true,
@@ -100,13 +103,15 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
     const background = isDark ? '#1e1e1e' : '#ffffff';
     const foreground = isDark ? '#d4d4d4' : '#1e1e1e';
     const border = isDark ? '#2d2d2d' : '#e5e5e5';
+    const languageTag = getLanguageTag();
+    const title = this.escapeHtml(localize('preview.markdownHtmlTitle'));
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${this.escapeHtml(languageTag)}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Babel Markdown Preview</title>
+  <title>${title}</title>
   <style>
     :root {
       color-scheme: ${result.theme};
@@ -150,14 +155,17 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
   }
 
   private buildErrorHtml(error: unknown): string {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = error instanceof Error ? error.message : localize('common.unknownError');
+    const languageTag = getLanguageTag();
+    const title = this.escapeHtml(localize('preview.markdownErrorTitle'));
+    const heading = this.escapeHtml(localize('preview.markdownErrorHeading'));
 
     return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${this.escapeHtml(languageTag)}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Babel Markdown Preview: Error</title>
+  <title>${title}</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -168,10 +176,14 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
   </style>
 </head>
 <body>
-  <h1>Preview Error</h1>
-  <p>${message}</p>
+  <h1>${heading}</h1>
+  <p>${this.escapeHtml(message)}</p>
 </body>
 </html>`;
+  }
+
+  private escapeHtml(value: string): string {
+    return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   private listenToDocument(document: vscode.TextDocument): void {

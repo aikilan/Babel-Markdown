@@ -4,6 +4,7 @@ import { TranslationPreviewManager } from '../panel/TranslationPreviewManager';
 import { SecretStorageService } from '../services/SecretStorageService';
 import type { ResolvedTranslationConfiguration } from '../types/translation';
 import { getExtensionConfiguration } from '../utils/config';
+import { localize } from '../i18n/localize';
 import { ExtensionLogger } from '../utils/logger';
 
 export function createOpenTranslationPreviewCommand(
@@ -15,12 +16,12 @@ export function createOpenTranslationPreviewCommand(
     const editor = vscode.window.activeTextEditor;
 
     if (!editor) {
-      void vscode.window.showWarningMessage('No active Markdown document to translate.');
+      void vscode.window.showWarningMessage(localize('command.openTranslation.noDocument'));
       return;
     }
 
     if (editor.document.languageId !== 'markdown') {
-      void vscode.window.showWarningMessage('Translation preview is only available for Markdown files.');
+      void vscode.window.showWarningMessage(localize('command.openTranslation.onlyMarkdown'));
       return;
     }
 
@@ -30,9 +31,7 @@ export function createOpenTranslationPreviewCommand(
     const apiKey = secretKey ?? configKey;
 
     if (!apiKey) {
-      void vscode.window.showWarningMessage(
-        'Translation API key not set. Run "Babel MD Viewer: Set Translation API Key" first.',
-      );
+      void vscode.window.showWarningMessage(localize('command.openTranslation.missingKey'));
       return;
     }
 
@@ -52,7 +51,7 @@ export function createOpenTranslationPreviewCommand(
       });
     } catch (error) {
       logger.error('Failed to open translation preview.', error);
-      void vscode.window.showErrorMessage('Unable to open translation preview. Check logs for details.');
+      void vscode.window.showErrorMessage(localize('command.openTranslation.failure'));
     }
   };
 }

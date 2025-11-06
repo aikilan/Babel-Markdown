@@ -5,6 +5,7 @@ import type { ResolvedTranslationConfiguration } from '../types/translation';
 import { TranslationService, TranslationSegmentUpdate } from '../services/TranslationService';
 import { TranslationCache } from '../services/TranslationCache';
 import type { HostToWebviewMessage, WebviewToHostMessage } from '../messaging/channel';
+import { getWebviewLocaleBundle, localize } from '../i18n/localize';
 import { ExtensionLogger } from '../utils/logger';
 
 interface PreviewEntry {
@@ -259,6 +260,29 @@ export class TranslationPreviewManager implements vscode.Disposable {
     });
 
     try {
+      const onPlan = (segments: string[]): void => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        this.logger.event('translation.planReady', {
+          ...requestMeta,
+          totalSegments: segments.length,
+        });
+
+        this.postMessage(panel, {
+          type: 'translationSource',
+          payload: {
+            documentPath,
+            targetLanguage: context.resolvedConfig.targetLanguage,
+            segments: segments.map((markdown, index) => ({
+              segmentIndex: index,
+              markdown,
+            })),
+          },
+        });
+      };
+
       const onSegment = (update: TranslationSegmentUpdate): void => {
         if (controller.signal.aborted) {
           return;
@@ -294,7 +318,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
           resolvedConfig: context.resolvedConfig,
           signal: controller.signal,
         },
-        { onSegment },
+        { onPlan, onSegment },
       );
 
       if (controller.signal.aborted) {
@@ -333,7 +357,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
       }
 
       this.logger.error(`Failed to render translation preview for ${documentPath}.`, error);
-      const message = error instanceof Error ? error.message : 'Unknown error';
+  const message = error instanceof Error ? error.message : localize('common.unknownError');
       const interpretation = this.interpretError(message, {
         documentPath,
         targetLanguage: context.resolvedConfig.targetLanguage,
@@ -401,7 +425,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
 
   private buildTitle(document: vscode.TextDocument): string {
     const relativePath = this.getDocumentLabel(document);
-    return `Translated: ${relativePath}`;
+    return localize('preview.translationPanelTitle', { document: relativePath });
   }
 
   private getDocumentLabel(document: vscode.TextDocument): string {
@@ -414,14 +438,19 @@ export class TranslationPreviewManager implements vscode.Disposable {
     );
     const nonce = this.createNonce();
     const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+    const localeBundle = getWebviewLocaleBundle();
+    const localeJson = JSON.stringify(localeBundle).replace(/</g, '\\u003c');
+    const escapeHtml = (value: string): string =>
+      value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const escapeAttribute = (value: string): string => escapeHtml(value).replace(/"/g, '&quot;');
 
-    return `<!DOCTYPE html>
-<html lang="en">
+  return `<!DOCTYPE html>
+<html lang="${escapeAttribute(localeBundle.languageTag)}">
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Translation Preview</title>
+  <title>${escapeHtml(localeBundle.pageTitle)}</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -516,6 +545,14 @@ export class TranslationPreviewManager implements vscode.Disposable {
       word-break: break-word;
     }
 
+    .preview__chunk {
+      margin: 0 0 16px;
+    }
+
+    .preview__chunk--source {
+      opacity: 0.65;
+    }
+
     a {
       color: var(--vscode-textLink-foreground);
     }
@@ -558,11 +595,16 @@ export class TranslationPreviewManager implements vscode.Disposable {
   <main>
     <header class="preview__header">
       <p id="preview-status" class="preview__status" role="status" aria-live="polite" data-state="idle"></p>
-      <button id="preview-retry" class="preview__retry" type="button" hidden>Retry translation</button>
+      <button id="preview-retry" class="preview__retry" type="button" hidden>${escapeHtml(
+        localeBundle.retryButtonLabel,
+      )}</button>
     </header>
     <div id="preview-error" class="preview__error" role="alert" hidden></div>
-    <article id="preview-content" class="preview__content" aria-label="Translated Markdown"></article>
+    <article id="preview-content" class="preview__content" aria-label="${escapeAttribute(
+      localeBundle.ariaContentLabel,
+    )}"></article>
   </main>
+  <script nonce="${nonce}">window.__babelMdViewerLocale=${localeJson};</script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
 </html>`;
@@ -647,15 +689,24 @@ export class TranslationPreviewManager implements vscode.Disposable {
     info: { documentPath: string; targetLanguage: string },
   ): ErrorInterpretation {
     const normalized = message.toLowerCase();
-    const baseNotification = `Translation failed for ${info.documentPath} → ${info.targetLanguage}.`;
+    const baseNotification = localize('translation.error.base', {
+      document: info.documentPath,
+      language: info.targetLanguage,
+    });
+    const formatNotification = (hint: string): string => `${baseNotification} ${hint} (${message})`;
 
     if (normalized.includes('401') || normalized.includes('unauthorized') || normalized.includes('forbidden')) {
-      const hint = 'Authentication failed. Update the translation API key and try again.';
+      const hint = localize('translation.error.authHint');
       return {
         category: 'authentication',
         hint,
-        notification: `${baseNotification} ${hint} (${message})`,
-        actions: [{ title: 'Set API Key', command: 'babelMdViewer.configureTranslationApiKey' }],
+        notification: formatNotification(hint),
+        actions: [
+          {
+            title: localize('translation.error.action.setApiKey'),
+            command: 'babelMdViewer.configureTranslationApiKey',
+          },
+        ],
       };
     }
 
@@ -664,14 +715,14 @@ export class TranslationPreviewManager implements vscode.Disposable {
       normalized.includes('timed out') ||
       normalized.includes('etimedout')
     ) {
-      const hint = 'The translation request timed out. Increase the timeout or try again.';
+      const hint = localize('translation.error.timeoutHint');
       return {
         category: 'timeout',
         hint,
-        notification: `${baseNotification} ${hint} (${message})`,
+        notification: formatNotification(hint),
         actions: [
           {
-            title: 'Adjust Timeout',
+            title: localize('translation.error.action.adjustTimeout'),
             command: 'workbench.action.openSettings',
             args: ['babelMdViewer.translation.timeoutMs'],
           },
@@ -680,11 +731,11 @@ export class TranslationPreviewManager implements vscode.Disposable {
     }
 
     if (normalized.includes('429') || normalized.includes('rate limit')) {
-      const hint = 'The translation service rate limit was reached. Wait a moment before retrying.';
+      const hint = localize('translation.error.rateLimitHint');
       return {
         category: 'rateLimit',
         hint,
-        notification: `${baseNotification} ${hint} (${message})`,
+        notification: formatNotification(hint),
       };
     }
 
@@ -694,14 +745,14 @@ export class TranslationPreviewManager implements vscode.Disposable {
       normalized.includes('network') ||
       normalized.includes('fetch failed')
     ) {
-      const hint = 'Network error. Check the translation API base URL or your internet connection.';
+      const hint = localize('translation.error.networkHint');
       return {
         category: 'network',
         hint,
-        notification: `${baseNotification} ${hint} (${message})`,
+        notification: formatNotification(hint),
         actions: [
           {
-            title: 'Open Translation Settings',
+            title: localize('translation.error.action.openSettings'),
             command: 'workbench.action.openSettings',
             args: ['babelMdViewer.translation'],
           },
@@ -709,11 +760,11 @@ export class TranslationPreviewManager implements vscode.Disposable {
       };
     }
 
-    const hint = 'Check the extension output channel for more details and retry.';
+    const hint = localize('translation.error.unknownHint');
     return {
       category: 'unknown',
       hint,
-      notification: `${baseNotification} ${hint} (${message})`,
+      notification: formatNotification(hint),
     };
   }
 

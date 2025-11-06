@@ -1,7 +1,7 @@
 {
   "name": "babel-md-viewer",
-  "displayName": "Babel Markdown Viewer",
-  "description": "Preview Markdown files transformed with Babel-style pipelines inside VS Code.",
+  "displayName": "%extension.displayName%",
+  "description": "%extension.description%",
   "publisher": "your-name",
   "version": "0.0.4",
   "license": "MIT",
@@ -23,28 +23,28 @@
     "commands": [
       {
         "command": "babelMdViewer.openPreview",
-        "title": "Babel MD Viewer: Open Preview",
-        "category": "Babel MD Viewer"
+        "title": "%command.openPreview.title%",
+        "category": "%command.category%"
       },
       {
         "command": "babelMdViewer.refreshPreview",
-        "title": "Babel MD Viewer: Refresh Preview",
-        "category": "Babel MD Viewer"
+        "title": "%command.refreshPreview.title%",
+        "category": "%command.category%"
       },
       {
         "command": "babelMdViewer.openTranslationPreview",
-        "title": "Babel MD Viewer: Open Translation Preview",
-        "category": "Babel MD Viewer"
+        "title": "%command.openTranslationPreview.title%",
+        "category": "%command.category%"
       },
       {
         "command": "babelMdViewer.refreshTranslationPreview",
-        "title": "Babel MD Viewer: Refresh Translation Preview",
-        "category": "Babel MD Viewer"
+        "title": "%command.refreshTranslationPreview.title%",
+        "category": "%command.category%"
       },
       {
         "command": "babelMdViewer.configureTranslationApiKey",
-        "title": "Babel MD Viewer: Set Translation API Key",
-        "category": "Babel MD Viewer"
+        "title": "%command.configureTranslationApiKey.title%",
+        "category": "%command.category%"
       }
     ],
     "menus": {
@@ -70,7 +70,7 @@
     },
     "configuration": {
       "type": "object",
-      "title": "Babel MD Viewer",
+      "title": "%configuration.title%",
       "properties": {
         "babelMdViewer.previewTheme": {
           "type": "string",
@@ -79,7 +79,7 @@
             "light",
             "dark"
           ],
-          "description": "Select the theme for the preview webview."
+          "description": "%config.previewTheme.description%"
         },
         "babelMdViewer.transformPlugins": {
           "type": "array",
@@ -87,33 +87,33 @@
             "type": "string"
           },
           "default": [],
-          "description": "List of Babel plugins applied before rendering Markdown."
+          "description": "%config.transformPlugins.description%"
         },
         "babelMdViewer.translation.apiBaseUrl": {
           "type": "string",
           "default": "https://api.openai.com/v1",
-          "markdownDescription": "Base URL for the OpenAI-compatible translation endpoint."
+          "markdownDescription": "%config.translation.apiBaseUrl.markdownDescription%"
         },
         "babelMdViewer.translation.apiKey": {
           "type": "string",
           "default": "",
-          "markdownDescription": "API key used for translation calls. Stored securely via command palette when possible; avoid committing plain text values."
+          "markdownDescription": "%config.translation.apiKey.markdownDescription%"
         },
         "babelMdViewer.translation.model": {
           "type": "string",
           "default": "gpt-4o-mini",
-          "markdownDescription": "Model identifier used for translation requests."
+          "markdownDescription": "%config.translation.model.markdownDescription%"
         },
         "babelMdViewer.translation.targetLanguage": {
           "type": "string",
           "default": "en",
-          "markdownDescription": "Target language for translated Markdown output (e.g., `en`, `zh-CN`)."
+          "markdownDescription": "%config.translation.targetLanguage.markdownDescription%"
         },
         "babelMdViewer.translation.timeoutMs": {
           "type": "number",
           "default": 30000,
           "minimum": 1000,
-          "markdownDescription": "Timeout (in milliseconds) for translation API requests."
+          "markdownDescription": "%config.translation.timeoutMs.markdownDescription%"
         }
       }
     }

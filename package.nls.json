@@ -1,0 +1,18 @@
+{
+  "extension.displayName": "Babel Markdown Viewer",
+  "extension.description": "Preview Markdown files transformed with Babel-style pipelines inside VS Code.",
+  "command.openPreview.title": "Babel MD Viewer: Open Preview",
+  "command.refreshPreview.title": "Babel MD Viewer: Refresh Preview",
+  "command.openTranslationPreview.title": "Babel MD Viewer: Open Translation Preview",
+  "command.refreshTranslationPreview.title": "Babel MD Viewer: Refresh Translation Preview",
+  "command.configureTranslationApiKey.title": "Babel MD Viewer: Set Translation API Key",
+  "command.category": "Babel MD Viewer",
+  "configuration.title": "Babel MD Viewer",
+  "config.previewTheme.description": "Select the theme for the preview webview.",
+  "config.transformPlugins.description": "List of Babel plugins applied before rendering Markdown.",
+  "config.translation.apiBaseUrl.markdownDescription": "Base URL for the OpenAI-compatible translation endpoint.",
+  "config.translation.apiKey.markdownDescription": "API key used for translation calls. Stored securely via command palette when possible; avoid committing plain text values.",
+  "config.translation.model.markdownDescription": "Model identifier used for translation requests.",
+  "config.translation.targetLanguage.markdownDescription": "Target language for translated Markdown output (e.g., `en`, `zh-CN`).",
+  "config.translation.timeoutMs.markdownDescription": "Timeout (in milliseconds) for translation API requests."
+}
