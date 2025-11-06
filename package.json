@@ -54,7 +54,7 @@
     "menus": {
       "editor/context": [
         {
-          "command": "babelMdViewer.openPreview",
+          "command": "babelMdViewer.openTranslationPreview",
           "group": "navigation@2",
           "when": "resourceLangId == markdown"
         }
