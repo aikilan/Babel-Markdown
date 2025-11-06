@@ -2,7 +2,7 @@
   "name": "babel-md-viewer",
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
-  "publisher": "aikilan",
+  "publisher": "BabelMarkdown",
   "author": "aikilan",
   "version": "1.0.5",
   "license": "MIT",
