@@ -5,11 +5,14 @@ import type {
   RawTranslationResult,
   ResolvedTranslationConfiguration,
   TranslationResult,
+  TranslationRecovery,
+  TranslationErrorCode,
 } from '../types/translation';
-import { OpenAITranslationClient } from './OpenAITranslationClient';
+import { OpenAITranslationClient, TranslationProviderError } from './OpenAITranslationClient';
 import { TranslationCache } from './TranslationCache';
 import { ExtensionLogger } from '../utils/logger';
 import { renderMarkdownToHtml } from '../utils/markdown';
+import { delay } from '../utils/async';
 
 export interface TranslationRequestContext {
   document: vscode.TextDocument;
@@ -27,11 +30,56 @@ export interface TranslationSegmentUpdate {
   latencyMs: number;
   providerId: string;
   wasCached: boolean;
+  recovery?: TranslationSegmentRecovery;
 }
+
+export interface TranslationSegmentRecovery {
+  type: 'cacheFallback' | 'placeholder';
+  code: TranslationErrorCode;
+  attempts: number;
+  message: string;
+}
+
+type SegmentProcessingOutcome =
+  | {
+      kind: 'success';
+      result: RawTranslationResult;
+      shouldCache: boolean;
+    }
+  | {
+      kind: 'recovered';
+      result: RawTranslationResult;
+      recovery: TranslationSegmentRecovery;
+      shouldCache: boolean;
+    }
+  | {
+      kind: 'failed';
+      error: TranslationProviderError;
+    };
 
 export interface TranslationHandlers {
   onPlan?: (segments: string[]) => void;
   onSegment?: (update: TranslationSegmentUpdate) => void;
+}
+
+export class TranslationRunError extends Error {
+  constructor(
+    message: string,
+    public readonly code: TranslationErrorCode,
+    public readonly segmentIndex?: number,
+    options?: { cause?: unknown },
+  ) {
+    super(message);
+    this.name = 'TranslationRunError';
+
+    if (options?.cause !== undefined) {
+      (this as { cause?: unknown }).cause = options.cause;
+    }
+
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, TranslationRunError);
+    }
+  }
 }
 
 export class TranslationService {
@@ -101,7 +149,9 @@ export class TranslationService {
     }
 
     handlers?.onPlan?.([...segments]);
-    const executeWithConcurrency = async (limit: number): Promise<RawTranslationResult> =>
+    const executeWithConcurrency = async (
+      limit: number,
+    ): Promise<RawTranslationResult & { recoveries: TranslationRecovery[] }> =>
       this.executeSegments(segments, context, handlers, {
         concurrency: limit,
         relativePath,
@@ -116,8 +166,9 @@ export class TranslationService {
           throw error;
         }
 
-        this.logger.error('Translation service failed.', error);
-        throw error instanceof Error ? error : new Error(String(error));
+        const runError = this.ensureRunError(error);
+        this.logger.error('Translation service failed.', runError);
+        throw runError;
       }
     };
 
@@ -133,9 +184,14 @@ export class TranslationService {
         throw error;
       }
 
-      if (!context.configuration.translation.parallelismFallbackEnabled) {
-        this.logger.error('Translation service failed.', error);
-        throw error instanceof Error ? error : new Error(String(error));
+      const runError = this.ensureRunError(error);
+
+      if (
+        !context.configuration.translation.parallelismFallbackEnabled ||
+        this.isFatalCode(runError.code)
+      ) {
+        this.logger.error('Translation service failed.', runError);
+        throw runError;
       }
 
       this.logger.warn(
@@ -145,14 +201,18 @@ export class TranslationService {
         documentPath: relativePath,
         targetLanguage: context.resolvedConfig.targetLanguage,
         attemptedConcurrency: concurrencyLimit,
-        error: error instanceof Error ? error.message : String(error),
+        error: runError.message,
+        errorCode: runError.code,
+        segmentIndex: runError.segmentIndex ?? null,
       });
 
       return runSerial();
     }
   }
 
-  private composeResult(result: RawTranslationResult): TranslationResult {
+  private composeResult(
+    result: RawTranslationResult & { recoveries?: TranslationRecovery[] },
+  ): TranslationResult {
     return {
       ...result,
       html: renderMarkdownToHtml(result.markdown),
@@ -291,13 +351,14 @@ export class TranslationService {
     context: TranslationRequestContext,
     handlers: TranslationHandlers | undefined,
     options: { concurrency: number; relativePath: string },
-  ): Promise<RawTranslationResult> {
+  ): Promise<RawTranslationResult & { recoveries: TranslationRecovery[] }> {
     const totalSegments = segments.length;
     if (totalSegments === 0) {
       return {
         markdown: '',
         providerId: context.resolvedConfig.model,
         latencyMs: 0,
+        recoveries: [],
       };
     }
 
@@ -311,14 +372,16 @@ export class TranslationService {
         latencyMs: number;
         providerId: string;
         wasCached: boolean;
+        recovery?: TranslationSegmentRecovery;
       }
     >();
     let aggregateLatency = 0;
     let providerId: string | undefined;
     let nextIndex = 0;
     let flushIndex = 0;
-    let capturedError: unknown;
     const cachedIndices = new Set<number>();
+    const recoveries: TranslationRecovery[] = [];
+    let capturedError: { error: TranslationProviderError; index: number } | undefined;
 
     if (context.cache) {
       for (let index = 0; index < totalSegments; index += 1) {
@@ -359,7 +422,7 @@ export class TranslationService {
       return undefined;
     };
 
-    const flush = () => {
+    const flush = (): void => {
       while (pending.has(flushIndex)) {
         const entry = pending.get(flushIndex)!;
         pending.delete(flushIndex);
@@ -367,6 +430,16 @@ export class TranslationService {
         combinedMarkdown[flushIndex] = entry.markdown.trimEnd();
         aggregateLatency += entry.latencyMs;
         providerId = entry.providerId;
+
+        if (entry.recovery) {
+          recoveries.push({
+            segmentIndex: flushIndex,
+            code: entry.recovery.code,
+            type: entry.recovery.type,
+            attempts: entry.recovery.attempts,
+            message: entry.recovery.message,
+          });
+        }
 
         handlers?.onSegment?.({
           segmentIndex: flushIndex,
@@ -376,6 +449,7 @@ export class TranslationService {
           latencyMs: entry.latencyMs,
           providerId: entry.providerId,
           wasCached: entry.wasCached,
+          recovery: entry.recovery,
         });
 
         flushIndex += 1;
@@ -391,8 +465,13 @@ export class TranslationService {
         markdown,
         providerId: providerId ?? context.resolvedConfig.model,
         latencyMs: aggregateLatency,
+        recoveries,
       };
     }
+
+    const maxAttempts = this.normalizeRetryAttempts(
+      context.configuration.translation.retryMaxAttempts,
+    );
 
     const worker = async (): Promise<void> => {
       while (true) {
@@ -407,50 +486,64 @@ export class TranslationService {
         }
 
         try {
-          if (context.signal?.aborted) {
-            throw new vscode.CancellationError();
-          }
-
-          const segment = segments[index];
-          const segmentResult = await this.openAIClient.translate({
-            documentText: segment,
-            fileName: `${options.relativePath}#segment-${index + 1}`,
-            resolvedConfig: context.resolvedConfig,
-            signal: context.signal,
+          const outcome = await this.translateSegmentWithRetries({
+            segmentIndex: index,
+            totalSegments,
+            segmentMarkdown: segments[index],
+            context,
+            attemptLimit: maxAttempts,
+            relativePath: options.relativePath,
           });
 
-          if (context.signal?.aborted) {
-            throw new vscode.CancellationError();
+          if (outcome.kind === 'failed') {
+            capturedError = { error: outcome.error, index };
+            return;
           }
 
-          context.cache?.setSegment(
-            context.document,
-            context.resolvedConfig,
-            segment,
-            segmentResult,
-          );
+          if (outcome.shouldCache) {
+            context.cache?.setSegment(
+              context.document,
+              context.resolvedConfig,
+              segments[index],
+              outcome.result,
+            );
+          }
+
+          const wasCached =
+            outcome.kind === 'recovered' && outcome.recovery.type === 'cacheFallback';
 
           pending.set(index, {
-            markdown: segmentResult.markdown,
-            html: renderMarkdownToHtml(segmentResult.markdown),
-            latencyMs: segmentResult.latencyMs,
-            providerId: segmentResult.providerId,
-            wasCached: false,
+            markdown: outcome.result.markdown,
+            html: renderMarkdownToHtml(outcome.result.markdown),
+            latencyMs: outcome.result.latencyMs,
+            providerId: outcome.result.providerId,
+            wasCached,
+            recovery: outcome.kind === 'recovered' ? outcome.recovery : undefined,
           });
 
           flush();
         } catch (error) {
-          capturedError = error;
+          if (error instanceof vscode.CancellationError) {
+            throw error;
+          }
+
+          capturedError = { error: this.ensureProviderError(error), index };
           return;
         }
       }
     };
 
-    const workers = Array.from({ length: Math.min(effectiveConcurrency, remainingSegments) }, () => worker());
+    const workers = Array.from(
+      { length: Math.min(effectiveConcurrency, remainingSegments) },
+      () => worker(),
+    );
     await Promise.all(workers);
 
     if (capturedError) {
-      throw capturedError;
+      const sanitized = this.sanitizeErrorMessage(capturedError.error.message);
+      throw new TranslationRunError(sanitized, capturedError.error.code, capturedError.index, {
+        cause: capturedError.error,
+      });
     }
 
     flush();
@@ -460,6 +553,272 @@ export class TranslationService {
       markdown,
       providerId: providerId ?? context.resolvedConfig.model,
       latencyMs: aggregateLatency,
+      recoveries,
     };
+  }
+
+  private async translateSegmentWithRetries(params: {
+    segmentIndex: number;
+    totalSegments: number;
+    segmentMarkdown: string;
+    context: TranslationRequestContext;
+    attemptLimit: number;
+    relativePath: string;
+  }): Promise<SegmentProcessingOutcome> {
+    const {
+      segmentIndex,
+      totalSegments,
+      segmentMarkdown,
+      context,
+      attemptLimit,
+      relativePath,
+    } = params;
+
+    const maxAttempts = Math.max(attemptLimit, 1);
+    let attempt = 0;
+    let lastError: TranslationProviderError | undefined;
+
+    while (attempt < maxAttempts) {
+      attempt += 1;
+
+      if (context.signal?.aborted) {
+        throw new vscode.CancellationError();
+      }
+
+      try {
+        const result = await this.openAIClient.translate({
+          documentText: segmentMarkdown,
+          fileName: `${relativePath}#segment-${segmentIndex + 1}`,
+          resolvedConfig: context.resolvedConfig,
+          signal: context.signal,
+        });
+
+        return {
+          kind: 'success',
+          result,
+          shouldCache: true,
+        };
+      } catch (error) {
+        if (error instanceof vscode.CancellationError) {
+          throw error;
+        }
+
+        const providerError = this.ensureProviderError(error);
+        lastError = providerError;
+
+        if (this.isFatalCode(providerError.code)) {
+          return { kind: 'failed', error: providerError };
+        }
+
+        if (providerError.retryable && attempt < maxAttempts) {
+          const delayMs = this.calculateRetryDelay(attempt);
+          this.logger.warn(
+            `Segment ${segmentIndex + 1}/${totalSegments} failed (${providerError.code}). Retrying in ${delayMs}ms.`,
+          );
+          await delay(delayMs);
+          continue;
+        }
+
+        break;
+      }
+    }
+
+    if (!lastError) {
+      lastError = new TranslationProviderError('Translation failed.', {
+        code: 'unknown',
+        retryable: false,
+      });
+    }
+
+    if (this.isFatalCode(lastError.code)) {
+      return { kind: 'failed', error: lastError };
+    }
+
+    const recovery = this.tryRecoverSegment({
+      context,
+      segmentMarkdown,
+      segmentIndex,
+      totalSegments,
+      error: lastError,
+      attempts: Math.max(attempt, 1),
+      relativePath,
+    });
+
+    if (recovery) {
+      return {
+        kind: 'recovered',
+        result: recovery.result,
+        recovery: recovery.recovery,
+        shouldCache: false,
+      };
+    }
+
+    return { kind: 'failed', error: lastError };
+  }
+
+  private normalizeRetryAttempts(value: number): number {
+    if (!Number.isFinite(value)) {
+      return 1;
+    }
+
+    const normalized = Math.floor(value);
+    return Math.max(1, Math.min(normalized, 6));
+  }
+
+  private calculateRetryDelay(attempt: number): number {
+    const base = 250;
+    const max = 2000;
+    const jitter = Math.random() * 100;
+    return Math.min(base * Math.pow(2, attempt - 1) + jitter, max);
+  }
+
+  private ensureProviderError(error: unknown): TranslationProviderError {
+    if (error instanceof TranslationProviderError) {
+      return error;
+    }
+
+    if (error instanceof TranslationRunError) {
+      return new TranslationProviderError(error.message, {
+        code: error.code,
+        retryable: false,
+        cause: error,
+      });
+    }
+
+    if (error instanceof Error) {
+      return new TranslationProviderError(error.message || 'Translation failed.', {
+        code: 'unknown',
+        retryable: false,
+        cause: error,
+      });
+    }
+
+    return new TranslationProviderError('Translation failed.', {
+      code: 'unknown',
+      retryable: false,
+      cause: error,
+    });
+  }
+
+  private ensureRunError(error: unknown): TranslationRunError {
+    if (error instanceof TranslationRunError) {
+      return error;
+    }
+
+    const providerError = this.ensureProviderError(error);
+    const message = this.sanitizeErrorMessage(providerError.message);
+
+    return new TranslationRunError(message, providerError.code, undefined, {
+      cause: providerError,
+    });
+  }
+
+  private isFatalCode(code: TranslationErrorCode): boolean {
+    return code === 'authentication';
+  }
+
+  private tryRecoverSegment(params: {
+    context: TranslationRequestContext;
+    segmentMarkdown: string;
+    segmentIndex: number;
+    totalSegments: number;
+    error: TranslationProviderError;
+    attempts: number;
+    relativePath: string;
+  }):
+    | {
+        result: RawTranslationResult;
+        recovery: TranslationSegmentRecovery;
+      }
+    | undefined {
+    const { context, segmentMarkdown, segmentIndex, totalSegments, error, attempts, relativePath } = params;
+    const sanitizedMessage = this.sanitizeErrorMessage(error.message);
+
+    const cached = context.cache?.getSegment(
+      context.document,
+      context.resolvedConfig,
+      segmentMarkdown,
+    );
+
+    if (cached) {
+      this.logger.warn(
+        `Segment ${segmentIndex + 1}/${totalSegments} failed after ${attempts} attempt(s); reused cached translation.`,
+      );
+      this.logger.event('translation.segmentRecovery', {
+        documentPath: relativePath,
+        segmentIndex,
+        totalSegments,
+        strategy: 'cacheFallback',
+        attempts,
+        errorCode: error.code,
+      });
+
+      return {
+        result: {
+          markdown: cached.markdown,
+          providerId: cached.providerId,
+          latencyMs: cached.latencyMs,
+        },
+        recovery: {
+          type: 'cacheFallback',
+          code: error.code,
+          attempts,
+          message: sanitizedMessage,
+        },
+      };
+    }
+
+    this.logger.warn(
+      `Segment ${segmentIndex + 1}/${totalSegments} failed after ${attempts} attempt(s); emitting placeholder content.`,
+    );
+    this.logger.event('translation.segmentRecovery', {
+      documentPath: relativePath,
+      segmentIndex,
+      totalSegments,
+      strategy: 'placeholder',
+      attempts,
+      errorCode: error.code,
+    });
+
+    const placeholderMarkdown = this.buildPlaceholderSegment(error, segmentMarkdown);
+
+    return {
+      result: {
+        markdown: placeholderMarkdown,
+        providerId: context.resolvedConfig.model,
+        latencyMs: 0,
+      },
+      recovery: {
+        type: 'placeholder',
+        code: error.code,
+        attempts,
+        message: sanitizedMessage,
+      },
+    };
+  }
+
+  private buildPlaceholderSegment(error: TranslationProviderError, segmentMarkdown: string): string {
+    const sanitizedMessage = this.sanitizeErrorMessage(error.message);
+    const headerLines = [
+      `> Translation failed (${error.code}). Showing original text instead.`,
+    ];
+
+    if (sanitizedMessage) {
+      headerLines.push(`> ${sanitizedMessage}`);
+    }
+
+    const header = headerLines.join('\n');
+    const body = segmentMarkdown.trim().length > 0 ? `\n\n${segmentMarkdown}` : '';
+    return `${header}${body}`;
+  }
+
+  private sanitizeErrorMessage(message: string): string {
+    const normalized = message.replace(/\s+/g, ' ').trim();
+
+    if (normalized.length > 180) {
+      return `${normalized.slice(0, 177)}...`;
+    }
+
+    return normalized;
   }
 }

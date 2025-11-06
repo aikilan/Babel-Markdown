@@ -137,6 +137,12 @@
           "type": "boolean",
           "default": true,
           "markdownDescription": "%config.translation.parallelFallbackEnabled.markdownDescription%"
+        },
+        "babelMdViewer.translation.retry.maxAttempts": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "markdownDescription": "%config.translation.retry.maxAttempts.markdownDescription%"
         }
       }
     }

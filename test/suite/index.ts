@@ -5,8 +5,12 @@ import * as vscode from 'vscode';
 import { SecretStorageService } from '../../src/services/SecretStorageService';
 import { BabelMarkdownService } from '../../src/services/BabelMarkdownService';
 import { TranslationCache } from '../../src/services/TranslationCache';
-import { TranslationService } from '../../src/services/TranslationService';
-import type { OpenAITranslationClient, TranslateRequest } from '../../src/services/OpenAITranslationClient';
+import { TranslationService, TranslationRunError } from '../../src/services/TranslationService';
+import {
+  TranslationProviderError,
+  type OpenAITranslationClient,
+  type TranslateRequest,
+} from '../../src/services/OpenAITranslationClient';
 import type { ExtensionConfiguration, TranslationConfiguration } from '../../src/types/config';
 import type {
   RawTranslationResult,
@@ -102,6 +106,11 @@ suite('Configuration Helper', () => {
       originalConfig?.parallelismFallbackEnabled,
       vscode.ConfigurationTarget.Workspace,
     );
+    await configuration.update(
+      'translation.retry.maxAttempts',
+      originalConfig?.retryMaxAttempts,
+      vscode.ConfigurationTarget.Workspace,
+    );
   });
 
   test('reads translation configuration with overrides', async () => {
@@ -152,6 +161,11 @@ suite('Configuration Helper', () => {
       false,
       vscode.ConfigurationTarget.Workspace,
     );
+    await configuration.update(
+      'translation.retry.maxAttempts',
+      4,
+      vscode.ConfigurationTarget.Workspace,
+    );
 
     const result = getExtensionConfiguration();
 
@@ -164,6 +178,7 @@ suite('Configuration Helper', () => {
     assert.strictEqual(result.translation.segmentMetricsLoggingEnabled, true);
     assert.strictEqual(result.translation.concurrencyLimit, 3);
     assert.strictEqual(result.translation.parallelismFallbackEnabled, false);
+    assert.strictEqual(result.translation.retryMaxAttempts, 4);
   });
 });
 
@@ -334,6 +349,7 @@ suite('TranslationService', () => {
       segmentMetricsLoggingEnabled: false,
       concurrencyLimit: 1,
       parallelismFallbackEnabled: true,
+      retryMaxAttempts: 3,
     },
   };
 
@@ -378,11 +394,21 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('propagates translation errors without fallback content', async () => {
+  test('emits placeholder content when translation fails without cache', async () => {
     const logger = new ExtensionLogger('Babel MD Viewer (Translation Error Test)');
+    let attemptCount = 0;
     const client: Partial<OpenAITranslationClient> = {
       translate: async (): Promise<RawTranslationResult> => {
+        attemptCount += 1;
         throw new Error('boom');
+      },
+    };
+
+    const fallbackConfiguration: ExtensionConfiguration = {
+      ...configuration,
+      translation: {
+        ...configuration.translation,
+        retryMaxAttempts: 1,
       },
     };
 
@@ -392,13 +418,62 @@ suite('TranslationService', () => {
       content: 'Source <script>alert(1)</script>',
     });
 
+    const segments: Array<{ index: number; recoveryType: string | undefined }> = [];
+
+    const result = await service.translateDocument(
+      {
+        document,
+        configuration: fallbackConfiguration,
+        resolvedConfig,
+        cache: new TranslationCache(),
+      },
+      {
+        onSegment: (update) => {
+          segments.push({ index: update.segmentIndex, recoveryType: update.recovery?.type });
+        },
+      },
+    );
+
+    assert.strictEqual(attemptCount, 1);
+    assert.strictEqual(segments.length, 1);
+    assert.strictEqual(segments[0]?.recoveryType, 'placeholder');
+    assert.ok(result.recoveries);
+    assert.strictEqual(result.recoveries?.length, 1);
+    assert.strictEqual(result.recoveries?.[0]?.type, 'placeholder');
+    assert.ok(result.markdown.includes('Source <script>alert(1)</script>'));
+
+    logger.dispose();
+  });
+
+  test('raises structured error on authentication failure', async () => {
+    const logger = new ExtensionLogger('Babel MD Viewer (Auth Error Test)');
+    const client: Partial<OpenAITranslationClient> = {
+      translate: async (): Promise<RawTranslationResult> => {
+        throw new TranslationProviderError('Unauthorized', {
+          code: 'authentication',
+          retryable: false,
+        });
+      },
+    };
+
+    const service = new TranslationService(logger, client as OpenAITranslationClient);
+    const document = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: '# Heading',
+    });
+
     await assert.rejects(
       service.translateDocument({
         document,
         configuration,
         resolvedConfig,
+        cache: new TranslationCache(),
       }),
-      /boom/,
+      (error: unknown) => {
+        assert.ok(error instanceof TranslationRunError);
+        assert.strictEqual(error.code, 'authentication');
+        return true;
+      },
     );
 
     logger.dispose();

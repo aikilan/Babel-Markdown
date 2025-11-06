@@ -19,11 +19,15 @@ type WebviewLocaleBundle = {
     statusInProgress: string;
     progressTemplate: string;
     statusCompleted: string;
+    statusCompletedWithWarnings: string;
     statusLastAttempt: string;
     errorMessage: string;
+    warningCacheFallback: string;
+    warningPlaceholder: string;
   };
   meta: {
     cachedLabel: string;
+    recoveredLabel: string;
   };
 };
 
@@ -46,11 +50,15 @@ const FALLBACK_LOCALE: WebviewLocaleBundle = {
     statusInProgress: 'Translating {document} → {language}{progress}…',
     progressTemplate: ' ({current}/{total})',
     statusCompleted: 'Translated {document} → {language} — {meta}',
+    statusCompletedWithWarnings: 'Translated {document} → {language} — {meta} (warnings)',
     statusLastAttempt: 'Last attempt · {document} → {language}',
     errorMessage: 'Failed to translate {document} → {language}: {message}{hint}',
+    warningCacheFallback: 'Reused cached translations for {count} segment(s) after errors.',
+    warningPlaceholder: 'Showing original text for {count} segment(s) because translation failed.',
   },
   meta: {
     cachedLabel: 'cached',
+    recoveredLabel: 'warnings',
   },
 };
 
@@ -86,6 +94,7 @@ const vscodeApi = (typeof acquireVsCodeApi !== 'undefined'
 const outputElement = document.getElementById('preview-content');
 const statusElement = document.getElementById('preview-status');
 const errorElement = document.getElementById('preview-error');
+const warningElement = document.getElementById('preview-warning');
 const retryElement = document.getElementById('preview-retry');
 
 if (!(outputElement instanceof HTMLElement)) {
@@ -100,6 +109,10 @@ if (!(errorElement instanceof HTMLDivElement)) {
   throw new Error('Translation preview DOM failed to initialize: preview-error.');
 }
 
+if (!(warningElement instanceof HTMLDivElement)) {
+  throw new Error('Translation preview DOM failed to initialize: preview-warning.');
+}
+
 if (!(retryElement instanceof HTMLButtonElement)) {
   throw new Error('Translation preview DOM failed to initialize: preview-retry.');
 }
@@ -107,6 +120,7 @@ if (!(retryElement instanceof HTMLButtonElement)) {
 const outputContainer = outputElement;
 const statusContainer = statusElement;
 const errorContainer = errorElement;
+const warningContainer = warningElement;
 const retryButton = retryElement;
 
 retryButton.textContent = locale.retryButtonLabel;
@@ -140,6 +154,8 @@ function renderSourceSegments(
   lastDocumentPath = payload.documentPath || lastDocumentPath;
   lastTargetLanguage = payload.targetLanguage || lastTargetLanguage;
   errorContainer.hidden = true;
+  warningContainer.hidden = true;
+  warningContainer.textContent = '';
   retryButton.hidden = true;
   retryButton.disabled = true;
 
@@ -198,6 +214,8 @@ function setLoading(
     });
     retryButton.hidden = true;
     retryButton.disabled = true;
+    warningContainer.hidden = true;
+    warningContainer.textContent = '';
   } else if (!pendingRetry) {
     statusContainer.textContent = '';
   }
@@ -222,13 +240,48 @@ function renderResult(payload: Extract<HostToWebviewMessage, { type: 'translatio
     metaSegments.push(locale.meta.cachedLabel);
   }
 
+  const cacheFallbackCount =
+    payload.recoveries?.filter((entry) => entry.type === 'cacheFallback').length ?? 0;
+  const placeholderCount =
+    payload.recoveries?.filter((entry) => entry.type === 'placeholder').length ?? 0;
+  const hasWarnings = cacheFallbackCount + placeholderCount > 0;
+
+  if (hasWarnings) {
+    metaSegments.push(locale.meta.recoveredLabel);
+  }
+
   const documentLabel = payload.documentPath || locale.placeholders.currentDocument;
   const languageLabel = payload.targetLanguage || locale.placeholders.configuredLanguage;
-  statusContainer.textContent = format(locale.translations.statusCompleted, {
-    document: documentLabel,
-    language: languageLabel,
-    meta: metaSegments.join(' · '),
-  });
+  if (hasWarnings) {
+    const warningMessages: string[] = [];
+    if (cacheFallbackCount > 0) {
+      warningMessages.push(
+        format(locale.translations.warningCacheFallback, { count: cacheFallbackCount }),
+      );
+    }
+    if (placeholderCount > 0) {
+      warningMessages.push(
+        format(locale.translations.warningPlaceholder, { count: placeholderCount }),
+      );
+    }
+
+    warningContainer.hidden = false;
+    warningContainer.textContent = warningMessages.join(' ');
+  } else {
+    warningContainer.hidden = true;
+    warningContainer.textContent = '';
+  }
+
+  statusContainer.textContent = format(
+    hasWarnings
+      ? locale.translations.statusCompletedWithWarnings
+      : locale.translations.statusCompleted,
+    {
+      document: documentLabel,
+      language: languageLabel,
+      meta: metaSegments.join(' · '),
+    },
+  );
   renderHtml(payload.html);
 }
 
@@ -255,6 +308,8 @@ function renderError(payload: Extract<HostToWebviewMessage, { type: 'translation
   outputContainer.innerHTML = '';
   retryButton.hidden = false;
   retryButton.disabled = false;
+  warningContainer.hidden = true;
+  warningContainer.textContent = '';
 }
 let suppressScrollEvents = false;
 let suppressTimer: number | undefined;
@@ -280,6 +335,20 @@ function appendChunk(
     } else {
       existing.classList.remove('preview__chunk--cached');
     }
+    if (payload.recovery) {
+      existing.dataset.recoveryType = payload.recovery.type;
+      existing.classList.add('preview__chunk--recovered');
+      if (payload.recovery.type === 'placeholder') {
+        existing.classList.add('preview__chunk--placeholder');
+        existing.classList.remove('preview__chunk--cached');
+      } else {
+        existing.classList.remove('preview__chunk--placeholder');
+      }
+    } else {
+      existing.classList.remove('preview__chunk--recovered');
+      existing.classList.remove('preview__chunk--placeholder');
+      existing.removeAttribute('data-recovery-type');
+    }
   } else {
     const wrapper = document.createElement('section');
     wrapper.className = 'preview__chunk preview__chunk--translated';
@@ -287,6 +356,14 @@ function appendChunk(
     wrapper.dataset.cached = wasCached ? 'true' : 'false';
     if (wasCached) {
       wrapper.classList.add('preview__chunk--cached');
+    }
+    if (payload.recovery) {
+      wrapper.dataset.recoveryType = payload.recovery.type;
+      wrapper.classList.add('preview__chunk--recovered');
+      if (payload.recovery.type === 'placeholder') {
+        wrapper.classList.add('preview__chunk--placeholder');
+        wrapper.classList.remove('preview__chunk--cached');
+      }
     }
     wrapper.innerHTML = payload.html;
     outputContainer.appendChild(wrapper);

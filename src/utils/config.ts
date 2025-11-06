@@ -19,8 +19,9 @@ export function getExtensionConfiguration(
       timeoutMs: configuration.get<number>('translation.timeoutMs', 30000),
       adaptiveBatchingEnabled: configuration.get<boolean>('translation.enableAdaptiveBatching', false),
       segmentMetricsLoggingEnabled: configuration.get<boolean>('translation.logSegmentMetrics', false),
-  concurrencyLimit: configuration.get<number>('translation.concurrencyLimit', 2),
+      concurrencyLimit: configuration.get<number>('translation.concurrencyLimit', 2),
       parallelismFallbackEnabled: configuration.get<boolean>('translation.parallelFallbackEnabled', true),
+      retryMaxAttempts: configuration.get<number>('translation.retry.maxAttempts', 3),
     },
   };
 }

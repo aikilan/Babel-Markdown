@@ -18,5 +18,6 @@
   "config.translation.enableAdaptiveBatching.markdownDescription": "在翻译前合并较短的片段，以减少请求开销（试验性功能）。",
   "config.translation.logSegmentMetrics.markdownDescription": "将分段规划指标记录到输出面板，便于诊断。",
   "config.translation.concurrencyLimit.markdownDescription": "并行执行翻译请求的最大数量（实验性调度器功能）。",
-  "config.translation.parallelFallbackEnabled.markdownDescription": "当并行翻译失败时自动回退到串行重试。"
+  "config.translation.parallelFallbackEnabled.markdownDescription": "当并行翻译失败时自动回退到串行重试。",
+  "config.translation.retry.maxAttempts.markdownDescription": "每个片段的最大翻译尝试次数（包含首次尝试），超过后视为失败。"
 }

@@ -1,3 +1,12 @@
+export type TranslationErrorCode =
+  | 'authentication'
+  | 'timeout'
+  | 'rateLimit'
+  | 'network'
+  | 'server'
+  | 'invalidResponse'
+  | 'unknown';
+
 export interface ResolvedTranslationConfiguration {
   apiBaseUrl: string;
   apiKey: string;
@@ -14,8 +23,17 @@ export interface RawTranslationResult {
 
 export interface TranslationResult extends RawTranslationResult {
   html: string;
+  recoveries?: TranslationRecovery[];
 }
 
 export interface CachedSegmentResult extends RawTranslationResult {
   fingerprint: string;
+}
+
+export interface TranslationRecovery {
+  segmentIndex: number;
+  code: TranslationErrorCode;
+  type: 'cacheFallback' | 'placeholder';
+  attempts: number;
+  message: string;
 }

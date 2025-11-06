@@ -8,6 +8,7 @@ export interface TranslationConfiguration {
   segmentMetricsLoggingEnabled: boolean;
   concurrencyLimit: number;
   parallelismFallbackEnabled: boolean;
+  retryMaxAttempts: number;
 }
 
 export interface ExtensionConfiguration {

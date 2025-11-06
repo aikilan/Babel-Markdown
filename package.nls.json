@@ -18,5 +18,6 @@
   "config.translation.enableAdaptiveBatching.markdownDescription": "Merge shorter segments together before translation to reduce request overhead. Experimental feature.",
   "config.translation.logSegmentMetrics.markdownDescription": "Log segment planning metrics to the output channel for diagnostics.",
   "config.translation.concurrencyLimit.markdownDescription": "Maximum number of translation requests executed in parallel (requires experimental scheduler).",
-  "config.translation.parallelFallbackEnabled.markdownDescription": "Retry the translation serially if a parallel attempt fails."
+  "config.translation.parallelFallbackEnabled.markdownDescription": "Retry the translation serially if a parallel attempt fails.",
+  "config.translation.retry.maxAttempts.markdownDescription": "Maximum number of attempts to translate a segment before giving up (includes the first attempt)."
 }

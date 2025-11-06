@@ -236,6 +236,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
           documentPath,
           sourceVersion: context.document.version,
           wasCached: true,
+          recoveries: cached.recoveries ?? [],
         },
       });
       return;
@@ -295,6 +296,8 @@ export class TranslationPreviewManager implements vscode.Disposable {
           latencyMs: update.latencyMs,
           providerId: update.providerId,
           wasCached: update.wasCached,
+          recoveryType: update.recovery?.type ?? null,
+          recoveryCode: update.recovery?.code ?? null,
         });
 
         this.postMessage(panel, {
@@ -309,6 +312,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
             targetLanguage: context.resolvedConfig.targetLanguage,
             documentPath,
             wasCached: update.wasCached,
+            recovery: update.recovery,
           },
         });
       };
@@ -329,6 +333,18 @@ export class TranslationPreviewManager implements vscode.Disposable {
       }
 
       panel.title = this.buildTitle(context.document);
+      const recoveries = result.recoveries ?? [];
+      const shouldPersistDocumentCache = recoveries.length === 0;
+
+      if (recoveries.length > 0) {
+        this.logger.event('translation.recoverySummary', {
+          ...requestMeta,
+          recoveredSegments: recoveries.length,
+          cacheFallbackCount: recoveries.filter((entry) => entry.type === 'cacheFallback').length,
+          placeholderCount: recoveries.filter((entry) => entry.type === 'placeholder').length,
+        });
+      }
+
       this.postMessage(panel, {
         type: 'translationResult',
         payload: {
@@ -340,14 +356,22 @@ export class TranslationPreviewManager implements vscode.Disposable {
           documentPath,
           sourceVersion: context.document.version,
           wasCached: false,
+          recoveries,
         },
       });
-      this.cache.set(context.document, context.resolvedConfig, result);
+      if (shouldPersistDocumentCache) {
+        this.cache.set(context.document, context.resolvedConfig, result);
+      } else {
+        this.logger.info(
+          `Skipped document-level cache for ${documentPath} due to segment recoveries.`,
+        );
+      }
       this.logger.event('translation.success', {
         ...requestMeta,
         providerId: result.providerId,
         latencyMs: result.latencyMs,
         wasCached: false,
+        recoveredSegments: recoveries.length,
       });
       this.logger.info(
         `Translation succeeded for ${documentPath} → ${context.resolvedConfig.targetLanguage} using ${result.providerId} in ${result.latencyMs}ms.`,
@@ -542,6 +566,15 @@ export class TranslationPreviewManager implements vscode.Disposable {
       border: 1px solid var(--vscode-inputValidation-errorBorder);
     }
 
+    .preview__warning {
+      margin: 0 0 12px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      background: var(--vscode-inputValidation-warningBackground, rgba(255, 204, 0, 0.12));
+      color: var(--vscode-inputValidation-warningForeground, var(--vscode-descriptionForeground));
+      border: 1px solid var(--vscode-inputValidation-warningBorder, rgba(255, 204, 0, 0.35));
+    }
+
     .preview__content {
       line-height: 1.6;
       white-space: normal;
@@ -559,6 +592,16 @@ export class TranslationPreviewManager implements vscode.Disposable {
     .preview__chunk--cached {
       border-left: 3px solid var(--vscode-terminal-ansiGreen, #4caf50);
       padding-left: 12px;
+    }
+
+    .preview__chunk--recovered {
+      position: relative;
+    }
+
+    .preview__chunk--placeholder {
+      border-left: 3px solid var(--vscode-inputValidation-warningBorder, #ff9800);
+      padding-left: 12px;
+      background: var(--vscode-inputValidation-warningBackground, rgba(255, 152, 0, 0.08));
     }
 
     a {
@@ -608,6 +651,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
       )}</button>
     </header>
     <div id="preview-error" class="preview__error" role="alert" hidden></div>
+    <div id="preview-warning" class="preview__warning" role="note" hidden></div>
     <article id="preview-content" class="preview__content" aria-label="${escapeAttribute(
       localeBundle.ariaContentLabel,
     )}"></article>

@@ -183,6 +183,10 @@ const translations = {
     en: 'Translated {document} → {language} — {meta}',
     'zh-cn': '已翻译 {document} → {language} — {meta}',
   },
+  'webview.statusCompletedWithWarnings': {
+    en: 'Translated {document} → {language} — {meta} (warnings)',
+    'zh-cn': '已翻译 {document} → {language} — {meta}（含警告）',
+  },
   'webview.statusLastAttempt': {
     en: 'Last attempt · {document} → {language}',
     'zh-cn': '上次尝试 · {document} → {language}',
@@ -191,9 +195,21 @@ const translations = {
     en: 'Failed to translate {document} → {language}: {message}{hint}',
     'zh-cn': '翻译 {document} → {language} 时出错：{message}{hint}',
   },
+  'webview.warning.cacheFallback': {
+    en: 'Reused cached translations for {count} segment(s) after errors.',
+    'zh-cn': '由于错误，已对 {count} 个片段使用缓存结果。',
+  },
+  'webview.warning.placeholder': {
+    en: 'Showing original text for {count} segment(s) because translation failed.',
+    'zh-cn': '因翻译失败，{count} 个片段显示原始文本。',
+  },
   'webview.meta.cached': {
     en: 'cached',
     'zh-cn': '缓存命中',
+  },
+  'webview.meta.recovered': {
+    en: 'warnings',
+    'zh-cn': '警告',
   },
   'webview.placeholder.currentDocument': {
     en: 'current document',
@@ -262,11 +278,15 @@ export interface WebviewLocaleBundle {
     statusInProgress: string;
     progressTemplate: string;
     statusCompleted: string;
+    statusCompletedWithWarnings: string;
     statusLastAttempt: string;
     errorMessage: string;
+    warningCacheFallback: string;
+    warningPlaceholder: string;
   };
   meta: {
     cachedLabel: string;
+    recoveredLabel: string;
   };
 }
 
@@ -286,11 +306,15 @@ export function getWebviewLocaleBundle(language?: string): WebviewLocaleBundle {
       statusInProgress: localize('webview.statusInProgress', undefined, { language }),
       progressTemplate: localize('webview.progressTemplate', undefined, { language }),
       statusCompleted: localize('webview.statusCompleted', undefined, { language }),
+      statusCompletedWithWarnings: localize('webview.statusCompletedWithWarnings', undefined, { language }),
       statusLastAttempt: localize('webview.statusLastAttempt', undefined, { language }),
       errorMessage: localize('webview.errorMessage', undefined, { language }),
+      warningCacheFallback: localize('webview.warning.cacheFallback', undefined, { language }),
+      warningPlaceholder: localize('webview.warning.placeholder', undefined, { language }),
     },
     meta: {
       cachedLabel: localize('webview.meta.cached', undefined, { language }),
+      recoveredLabel: localize('webview.meta.recovered', undefined, { language }),
     },
   };
 }

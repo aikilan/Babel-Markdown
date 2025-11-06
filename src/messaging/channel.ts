@@ -1,3 +1,12 @@
+import type { TranslationErrorCode } from '../types/translation';
+
+type SerializedSegmentRecovery = {
+  type: 'cacheFallback' | 'placeholder';
+  code: TranslationErrorCode;
+  attempts: number;
+  message: string;
+};
+
 export type HostToWebviewMessage =
   | {
       type: 'translationResult';
@@ -10,6 +19,7 @@ export type HostToWebviewMessage =
         documentPath: string;
         sourceVersion: number;
         wasCached: boolean;
+        recoveries?: SerializedSegmentRecovery[];
       };
     }
   | {
@@ -53,6 +63,7 @@ export type HostToWebviewMessage =
         documentPath: string;
         targetLanguage: string;
         wasCached: boolean;
+        recovery?: SerializedSegmentRecovery;
       };
     }
   | {

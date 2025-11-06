@@ -23,6 +23,7 @@ This document captures architectural decisions for the Babel Markdown Viewer AI 
    - Houses translation-specific logic (prompt building, API client, caching, timeout handling).
    - Provides abstractions (`TranslationService`, `ConfigService`, `SecretStorageService`).
    - Keeps VS Code specific APIs at the edges so services remain testable.
+   - Implements retry policies and structured error handling with cache/placeholder fallbacks for segment failures.
 
 4. **Presentation Layer (`src/panel`)**
    - Manages the translation preview webview, message passing, scroll synchronization, and state transitions (idle/loading/result/error).
