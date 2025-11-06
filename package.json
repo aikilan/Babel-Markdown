@@ -157,6 +157,7 @@
     "build": "pnpm run typecheck && pnpm run build:extension && pnpm run build:webview",
     "compile": "pnpm run build",
     "package": "pnpm run build && pnpm exec vsce package --no-dependencies",
+    "publish": "pnpm run package && pnpm exec vsce publish --no-dependencies",
     "compile-tests": "tsc -p tsconfig.test.json",
     "watch": "tsc -watch -p tsconfig.json",
     "watch-tests": "tsc -watch -p tsconfig.test.json",
