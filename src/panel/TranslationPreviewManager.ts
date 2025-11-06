@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 
 import type { ExtensionConfiguration } from '../types/config';
 import type { ResolvedTranslationConfiguration } from '../types/translation';
-import { TranslationService } from '../services/TranslationService';
+import { TranslationService, TranslationSegmentUpdate } from '../services/TranslationService';
 import { TranslationCache } from '../services/TranslationCache';
 import type { HostToWebviewMessage, WebviewToHostMessage } from '../messaging/channel';
 import { ExtensionLogger } from '../utils/logger';
@@ -257,12 +257,43 @@ export class TranslationPreviewManager implements vscode.Disposable {
     });
 
     try {
-      const result = await this.translationService.translateDocument({
-        document: context.document,
-        configuration: context.configuration,
-        resolvedConfig: context.resolvedConfig,
-        signal: controller.signal,
-      });
+      const onSegment = (update: TranslationSegmentUpdate): void => {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        this.logger.event('translation.segmentCompleted', {
+          ...requestMeta,
+          segmentIndex: update.segmentIndex,
+          totalSegments: update.totalSegments,
+          latencyMs: update.latencyMs,
+          providerId: update.providerId,
+        });
+
+        this.postMessage(panel, {
+          type: 'translationChunk',
+          payload: {
+            segmentIndex: update.segmentIndex,
+            totalSegments: update.totalSegments,
+            markdown: update.markdown,
+            html: update.html,
+            providerId: update.providerId,
+            latencyMs: update.latencyMs,
+            targetLanguage: context.resolvedConfig.targetLanguage,
+            documentPath,
+          },
+        });
+      };
+
+      const result = await this.translationService.translateDocument(
+        {
+          document: context.document,
+          configuration: context.configuration,
+          resolvedConfig: context.resolvedConfig,
+          signal: controller.signal,
+        },
+        { onSegment },
+      );
 
       if (controller.signal.aborted) {
         return;

@@ -43,12 +43,24 @@ function postMessage(message: WebviewToHostMessage): void {
 let lastDocumentPath = '';
 let lastTargetLanguage = '';
 let pendingRetry = false;
+let totalSegments = 0;
+let completedSegments = 0;
+
+function resetStreamingState(): void {
+  totalSegments = 0;
+  completedSegments = 0;
+}
 
 function renderHtml(html: string): void {
   outputContainer.innerHTML = html;
 }
 
-function setLoading(isLoading: boolean, documentPath: string, targetLanguage: string): void {
+function setLoading(
+  isLoading: boolean,
+  documentPath: string,
+  targetLanguage: string,
+  segmentsHint?: number,
+): void {
   if (documentPath) {
     lastDocumentPath = documentPath;
   }
@@ -60,9 +72,15 @@ function setLoading(isLoading: boolean, documentPath: string, targetLanguage: st
   statusContainer.dataset.state = isLoading ? 'loading' : 'idle';
 
   if (isLoading) {
+    resetStreamingState();
+    if (typeof segmentsHint === 'number' && Number.isFinite(segmentsHint)) {
+      totalSegments = segmentsHint;
+    }
+    outputContainer.innerHTML = '';
     const documentLabel = lastDocumentPath || 'current document';
     const languageLabel = lastTargetLanguage || 'configured language';
-    statusContainer.textContent = `Translating ${documentLabel} → ${languageLabel}…`;
+    const segmentLabel = totalSegments > 0 ? ` (0/${totalSegments})` : '';
+    statusContainer.textContent = `Translating ${documentLabel} → ${languageLabel}${segmentLabel}…`;
     retryButton.hidden = true;
     retryButton.disabled = true;
   } else if (!pendingRetry) {
@@ -72,6 +90,7 @@ function setLoading(isLoading: boolean, documentPath: string, targetLanguage: st
 
 function renderResult(payload: Extract<HostToWebviewMessage, { type: 'translationResult' }>['payload']): void {
   pendingRetry = false;
+  resetStreamingState();
   lastDocumentPath = payload.documentPath;
   lastTargetLanguage = payload.targetLanguage;
   errorContainer.hidden = true;
@@ -94,6 +113,7 @@ function renderResult(payload: Extract<HostToWebviewMessage, { type: 'translatio
 
 function renderError(payload: Extract<HostToWebviewMessage, { type: 'translationError' }>['payload']): void {
   pendingRetry = false;
+  resetStreamingState();
   errorContainer.hidden = false;
   const messageSegments = [
     `Failed to translate ${payload.documentPath} → ${payload.targetLanguage}: ${payload.message}`,
@@ -114,6 +134,27 @@ function renderError(payload: Extract<HostToWebviewMessage, { type: 'translation
 }
 let suppressScrollEvents = false;
 let suppressTimer: number | undefined;
+
+function appendChunk(
+  payload: Extract<HostToWebviewMessage, { type: 'translationChunk' }>['payload'],
+): void {
+  completedSegments = Math.max(completedSegments, payload.segmentIndex + 1);
+  totalSegments = Math.max(totalSegments, payload.totalSegments);
+
+  const wrapper = document.createElement('section');
+  wrapper.className = 'preview__chunk';
+  wrapper.dataset.chunkIndex = payload.segmentIndex.toString();
+  wrapper.innerHTML = payload.html;
+  outputContainer.appendChild(wrapper);
+
+  const documentLabel = lastDocumentPath || payload.documentPath;
+  const languageLabel = lastTargetLanguage || payload.targetLanguage;
+  statusContainer.dataset.state = 'loading';
+  statusContainer.textContent = `Translating ${documentLabel} → ${languageLabel} (${completedSegments}/${totalSegments})…`;
+  retryButton.hidden = true;
+  retryButton.disabled = true;
+  errorContainer.hidden = true;
+}
 
 function applyScrollSync(line: number, totalLines: number): void {
   if (totalLines <= 1) {
@@ -147,7 +188,12 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
 
   switch (message.type) {
     case 'setLoading':
-      setLoading(message.payload.isLoading, message.payload.documentPath, message.payload.targetLanguage);
+      setLoading(
+        message.payload.isLoading,
+        message.payload.documentPath,
+        message.payload.targetLanguage,
+        message.payload.totalSegments,
+      );
       break;
     case 'translationResult':
       setLoading(false, '', message.payload.targetLanguage);
@@ -156,6 +202,9 @@ window.addEventListener('message', (event: MessageEvent<HostToWebviewMessage>) =
     case 'translationError':
       setLoading(false, message.payload.documentPath, message.payload.targetLanguage);
       renderError(message.payload);
+      break;
+    case 'translationChunk':
+      appendChunk(message.payload);
       break;
     case 'scrollSync':
       applyScrollSync(message.payload.line, message.payload.totalLines);

@@ -27,6 +27,20 @@ export type HostToWebviewMessage =
         isLoading: boolean;
         documentPath: string;
         targetLanguage: string;
+        totalSegments?: number;
+      };
+    }
+  | {
+      type: 'translationChunk';
+      payload: {
+        segmentIndex: number;
+        totalSegments: number;
+        markdown: string;
+        html: string;
+        providerId: string;
+        latencyMs: number;
+        documentPath: string;
+        targetLanguage: string;
       };
     }
   | {

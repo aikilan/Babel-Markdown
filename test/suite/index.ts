@@ -6,7 +6,7 @@ import { SecretStorageService } from '../../src/services/SecretStorageService';
 import { BabelMarkdownService } from '../../src/services/BabelMarkdownService';
 import { TranslationCache } from '../../src/services/TranslationCache';
 import { TranslationService } from '../../src/services/TranslationService';
-import type { OpenAITranslationClient } from '../../src/services/OpenAITranslationClient';
+import type { OpenAITranslationClient, TranslateRequest } from '../../src/services/OpenAITranslationClient';
 import type { ExtensionConfiguration, TranslationConfiguration } from '../../src/types/config';
 import type {
   RawTranslationResult,
@@ -300,7 +300,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('returns sanitized fallback html on error', async () => {
+  test('propagates translation errors without fallback content', async () => {
     const logger = new ExtensionLogger('Babel MD Viewer (Translation Error Test)');
     const client: Partial<OpenAITranslationClient> = {
       translate: async (): Promise<RawTranslationResult> => {
@@ -314,15 +314,60 @@ suite('TranslationService', () => {
       content: 'Source <script>alert(1)</script>',
     });
 
-    const result = await service.translateDocument({
-      document,
-      configuration,
-      resolvedConfig,
+    await assert.rejects(
+      service.translateDocument({
+        document,
+        configuration,
+        resolvedConfig,
+      }),
+      /boom/,
+    );
+
+    logger.dispose();
+  });
+
+  test('invokes segment handler for each translated paragraph', async () => {
+    const logger = new ExtensionLogger('Babel MD Viewer (Translation Segments Test)');
+    let callCount = 0;
+    const client: Partial<OpenAITranslationClient> = {
+      translate: async ({ documentText }: TranslateRequest): Promise<RawTranslationResult> => {
+        callCount += 1;
+        return {
+          markdown: `translated: ${documentText}`,
+          providerId: 'stub-provider',
+          latencyMs: 5,
+        };
+      },
+    };
+
+    const service = new TranslationService(logger, client as OpenAITranslationClient);
+    const document = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: 'First paragraph.\n\nSecond paragraph.\nStill second.',
     });
 
-    assert.strictEqual(result.providerId, 'error-fallback');
-    assert.ok(result.html.includes('Translation failed'));
-    assert.ok(!result.html.includes('<script>'));
+    const segments: Array<{ index: number; total: number }> = [];
+
+    const result = await service.translateDocument(
+      {
+        document,
+        configuration,
+        resolvedConfig,
+      },
+      {
+        onSegment: (update) => {
+          segments.push({ index: update.segmentIndex, total: update.totalSegments });
+        },
+      },
+    );
+
+    assert.strictEqual(callCount, 2);
+    assert.deepStrictEqual(segments, [
+      { index: 0, total: 2 },
+      { index: 1, total: 2 },
+    ]);
+    assert.ok(result.markdown.includes('translated: First paragraph.'));
+    assert.ok(result.markdown.includes('translated: Second paragraph.\nStill second.'));
 
     logger.dispose();
   });

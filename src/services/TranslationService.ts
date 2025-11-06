@@ -17,13 +17,25 @@ export interface TranslationRequestContext {
   signal?: AbortSignal;
 }
 
+export interface TranslationSegmentUpdate {
+  segmentIndex: number;
+  totalSegments: number;
+  markdown: string;
+  html: string;
+  latencyMs: number;
+  providerId: string;
+}
+
 export class TranslationService {
   constructor(
     private readonly logger: ExtensionLogger,
     private readonly openAIClient: OpenAITranslationClient,
   ) {}
 
-  async translateDocument(context: TranslationRequestContext): Promise<TranslationResult> {
+  async translateDocument(
+    context: TranslationRequestContext,
+    handlers?: { onSegment?: (update: TranslationSegmentUpdate) => void },
+  ): Promise<TranslationResult> {
     const relativePath = vscode.workspace.asRelativePath(context.document.uri);
 
     this.logger.info(
@@ -44,15 +56,56 @@ export class TranslationService {
       });
     }
 
-    try {
-      const result = await this.openAIClient.translate({
-        documentText: text,
-        fileName: relativePath,
-        resolvedConfig: context.resolvedConfig,
-        signal: context.signal,
-      });
+    const segments = this.splitIntoSegments(text);
 
-      return this.composeResult(result);
+    if (segments.length === 0) {
+      return this.composeResult({
+        markdown: '_The source document is empty; nothing to translate._',
+        providerId: 'noop',
+        latencyMs: 0,
+      });
+    }
+
+    const combinedMarkdown: string[] = [];
+    let aggregateLatency = 0;
+    let providerId: string | undefined;
+
+    try {
+      for (let index = 0; index < segments.length; index += 1) {
+        if (context.signal?.aborted) {
+          throw new vscode.CancellationError();
+        }
+
+        const segment = segments[index];
+        const segmentResult = await this.openAIClient.translate({
+          documentText: segment,
+          fileName: `${relativePath}#segment-${index + 1}`,
+          resolvedConfig: context.resolvedConfig,
+          signal: context.signal,
+        });
+
+  providerId = segmentResult.providerId;
+  aggregateLatency += segmentResult.latencyMs;
+  combinedMarkdown.push(segmentResult.markdown.trimEnd());
+
+        handlers?.onSegment?.({
+          segmentIndex: index,
+          totalSegments: segments.length,
+          markdown: segmentResult.markdown,
+          html: renderMarkdownToHtml(segmentResult.markdown),
+          latencyMs: segmentResult.latencyMs,
+          providerId: segmentResult.providerId,
+        });
+      }
+
+      const markdown = combinedMarkdown.join('\n\n');
+      const finalResult: RawTranslationResult = {
+        markdown,
+        providerId: providerId ?? context.resolvedConfig.model,
+        latencyMs: aggregateLatency,
+      };
+
+      return this.composeResult(finalResult);
     } catch (error) {
       if (error instanceof vscode.CancellationError) {
         throw error;
@@ -69,5 +122,43 @@ export class TranslationService {
       ...result,
       html: renderMarkdownToHtml(result.markdown),
     };
+  }
+
+  private splitIntoSegments(markdown: string): string[] {
+    const lines = markdown.split(/\r?\n/);
+    const segments: string[] = [];
+    let buffer: string[] = [];
+    let inFence = false;
+
+    const flush = () => {
+      if (buffer.length > 0) {
+        segments.push(buffer.join('\n'));
+        buffer = [];
+      }
+    };
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('```')) {
+        buffer.push(line);
+        inFence = !inFence;
+        continue;
+      }
+
+      if (!inFence && trimmed === '') {
+        flush();
+        continue;
+      }
+
+      buffer.push(line);
+    }
+
+    flush();
+
+    if (segments.length === 0 && markdown.trim().length > 0) {
+      return [markdown];
+    }
+
+    return segments;
   }
 }
