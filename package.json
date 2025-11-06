@@ -34,12 +34,14 @@
       {
         "command": "babelMdViewer.openTranslationPreview",
         "title": "%command.openTranslationPreview.title%",
-        "category": "%command.category%"
+        "category": "%command.category%",
+        "icon": "$(globe)"
       },
       {
         "command": "babelMdViewer.refreshTranslationPreview",
         "title": "%command.refreshTranslationPreview.title%",
-        "category": "%command.category%"
+        "category": "%command.category%",
+        "icon": "$(sync)"
       },
       {
         "command": "babelMdViewer.configureTranslationApiKey",
