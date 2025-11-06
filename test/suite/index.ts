@@ -92,6 +92,16 @@ suite('Configuration Helper', () => {
       originalConfig?.segmentMetricsLoggingEnabled,
       vscode.ConfigurationTarget.Workspace,
     );
+    await configuration.update(
+      'translation.concurrencyLimit',
+      originalConfig?.concurrencyLimit,
+      vscode.ConfigurationTarget.Workspace,
+    );
+    await configuration.update(
+      'translation.parallelFallbackEnabled',
+      originalConfig?.parallelismFallbackEnabled,
+      vscode.ConfigurationTarget.Workspace,
+    );
   });
 
   test('reads translation configuration with overrides', async () => {
@@ -132,6 +142,16 @@ suite('Configuration Helper', () => {
       true,
       vscode.ConfigurationTarget.Workspace,
     );
+    await configuration.update(
+      'translation.concurrencyLimit',
+      3,
+      vscode.ConfigurationTarget.Workspace,
+    );
+    await configuration.update(
+      'translation.parallelFallbackEnabled',
+      false,
+      vscode.ConfigurationTarget.Workspace,
+    );
 
     const result = getExtensionConfiguration();
 
@@ -142,6 +162,8 @@ suite('Configuration Helper', () => {
     assert.strictEqual(result.translation.timeoutMs, 45000);
     assert.strictEqual(result.translation.adaptiveBatchingEnabled, true);
     assert.strictEqual(result.translation.segmentMetricsLoggingEnabled, true);
+    assert.strictEqual(result.translation.concurrencyLimit, 3);
+    assert.strictEqual(result.translation.parallelismFallbackEnabled, false);
   });
 });
 
@@ -280,6 +302,8 @@ suite('TranslationService', () => {
       timeoutMs: 1000,
       adaptiveBatchingEnabled: false,
       segmentMetricsLoggingEnabled: false,
+      concurrencyLimit: 1,
+      parallelismFallbackEnabled: true,
     },
   };
 
@@ -446,6 +470,136 @@ suite('TranslationService', () => {
     assert.ok(result.markdown.includes('translated: Short one.'));
     assert.ok(result.markdown.includes('Short three.'));
     assert.strictEqual(translatedSegments[0].includes('Short two.'), true);
+
+    logger.dispose();
+  });
+
+  test('parallel scheduler preserves segment order', async () => {
+    const logger = new ExtensionLogger('Babel MD Viewer (Parallel Order Test)');
+    const callOrder: number[] = [];
+    const emissionOrder: number[] = [];
+
+    const client: Partial<OpenAITranslationClient> = {
+      translate: async ({ fileName, documentText }: TranslateRequest): Promise<RawTranslationResult> => {
+        const match = /#segment-(\d+)/.exec(fileName);
+        const index = match ? Number(match[1]) - 1 : 0;
+        callOrder.push(index);
+
+        if (index === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+        } else if (index === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+        }
+
+        return {
+          markdown: `translated-${index}: ${documentText}`,
+          providerId: 'stub-provider',
+          latencyMs: index + 1,
+        };
+      },
+    };
+
+    const parallelConfiguration: ExtensionConfiguration = {
+      ...configuration,
+      translation: {
+        ...configuration.translation,
+        concurrencyLimit: 2,
+      },
+    };
+
+    const service = new TranslationService(logger, client as OpenAITranslationClient);
+    const document = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: 'Alpha paragraph.\n\nBeta paragraph.\n\nGamma paragraph.',
+    });
+
+    const result = await service.translateDocument(
+      {
+        document,
+        configuration: parallelConfiguration,
+        resolvedConfig,
+      },
+      {
+        onSegment: (update) => {
+          emissionOrder.push(update.segmentIndex);
+        },
+      },
+    );
+
+    assert.deepStrictEqual(emissionOrder, [0, 1, 2]);
+    assert.strictEqual(result.markdown.includes('translated-0'), true);
+    assert.strictEqual(result.markdown.includes('translated-1'), true);
+    assert.strictEqual(result.markdown.includes('translated-2'), true);
+    assert.strictEqual(callOrder.length, 3);
+    assert.strictEqual(
+      result.markdown.indexOf('translated-0') < result.markdown.indexOf('translated-1'),
+      true,
+    );
+    assert.strictEqual(
+      result.markdown.indexOf('translated-1') < result.markdown.indexOf('translated-2'),
+      true,
+    );
+
+    logger.dispose();
+  });
+
+  test('parallel scheduler falls back to serial on failure when enabled', async () => {
+    const logger = new ExtensionLogger('Babel MD Viewer (Parallel Fallback Test)');
+    const failureCounts = new Map<number, number>();
+    const segmentUpdates = new Map<number, string>();
+
+    const client: Partial<OpenAITranslationClient> = {
+      translate: async ({ fileName, documentText }: TranslateRequest): Promise<RawTranslationResult> => {
+        const match = /#segment-(\d+)/.exec(fileName);
+        const index = match ? Number(match[1]) - 1 : 0;
+
+        if (index === 1 && (failureCounts.get(index) ?? 0) === 0) {
+          failureCounts.set(index, 1);
+          throw new Error('synthetic failure');
+        }
+
+        return {
+          markdown: `final-${index}: ${documentText}`,
+          providerId: 'stub-provider',
+          latencyMs: 4,
+        };
+      },
+    };
+
+    const fallbackConfiguration: ExtensionConfiguration = {
+      ...configuration,
+      translation: {
+        ...configuration.translation,
+        concurrencyLimit: 2,
+        parallelismFallbackEnabled: true,
+      },
+    };
+
+    const service = new TranslationService(logger, client as OpenAITranslationClient);
+    const document = await vscode.workspace.openTextDocument({
+      language: 'markdown',
+      content: 'One paragraph.\n\nTwo paragraph.\n\nThree paragraph.',
+    });
+
+    const result = await service.translateDocument(
+      {
+        document,
+        configuration: fallbackConfiguration,
+        resolvedConfig,
+      },
+      {
+        onSegment: (update) => {
+          segmentUpdates.set(update.segmentIndex, update.markdown);
+        },
+      },
+    );
+
+    assert.strictEqual(failureCounts.get(1), 1);
+    assert.strictEqual(segmentUpdates.size, 3);
+    assert.strictEqual(segmentUpdates.get(1)?.startsWith('final-1'), true);
+    assert.strictEqual(result.markdown.includes('final-0'), true);
+    assert.strictEqual(result.markdown.includes('final-1'), true);
+    assert.strictEqual(result.markdown.includes('final-2'), true);
 
     logger.dispose();
   });

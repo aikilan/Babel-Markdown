@@ -6,6 +6,8 @@ export interface TranslationConfiguration {
   timeoutMs: number;
   adaptiveBatchingEnabled: boolean;
   segmentMetricsLoggingEnabled: boolean;
+  concurrencyLimit: number;
+  parallelismFallbackEnabled: boolean;
 }
 
 export interface ExtensionConfiguration {

@@ -16,5 +16,7 @@
   "config.translation.targetLanguage.markdownDescription": "Target language for translated Markdown output (e.g., `en`, `zh-CN`).",
   "config.translation.timeoutMs.markdownDescription": "Timeout (in milliseconds) for translation API requests.",
   "config.translation.enableAdaptiveBatching.markdownDescription": "Merge shorter segments together before translation to reduce request overhead. Experimental feature.",
-  "config.translation.logSegmentMetrics.markdownDescription": "Log segment planning metrics to the output channel for diagnostics."
+  "config.translation.logSegmentMetrics.markdownDescription": "Log segment planning metrics to the output channel for diagnostics.",
+  "config.translation.concurrencyLimit.markdownDescription": "Maximum number of translation requests executed in parallel (requires experimental scheduler).",
+  "config.translation.parallelFallbackEnabled.markdownDescription": "Retry the translation serially if a parallel attempt fails."
 }

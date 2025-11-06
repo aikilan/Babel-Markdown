@@ -68,6 +68,10 @@ export class TranslationService {
       adaptive: context.configuration.translation.adaptiveBatchingEnabled,
     });
     const segments = plan.segments;
+    const concurrencyLimit = this.normalizeConcurrencyLimit(
+      context.configuration.translation.concurrencyLimit,
+      segments.length,
+    );
 
     if (context.configuration.translation.segmentMetricsLoggingEnabled) {
       this.logger.event('translation.segmentPlan', {
@@ -79,6 +83,9 @@ export class TranslationService {
         strategy: plan.strategy,
         documentCharacters: plan.metrics.documentCharacters,
         baseSegments: plan.metrics.baseSegments,
+        concurrencyLimit,
+        parallelEnabled: concurrencyLimit > 1,
+        parallelFallbackEnabled: context.configuration.translation.parallelismFallbackEnabled,
       });
     }
 
@@ -91,55 +98,54 @@ export class TranslationService {
     }
 
     handlers?.onPlan?.([...segments]);
+    const executeWithConcurrency = async (limit: number): Promise<RawTranslationResult> =>
+      this.executeSegments(segments, context, handlers, {
+        concurrency: limit,
+        relativePath,
+      });
 
-    const combinedMarkdown: string[] = [];
-    let aggregateLatency = 0;
-    let providerId: string | undefined;
-
-    try {
-      for (let index = 0; index < segments.length; index += 1) {
-        if (context.signal?.aborted) {
-          throw new vscode.CancellationError();
+    const runSerial = async (): Promise<TranslationResult> => {
+      try {
+        const result = await executeWithConcurrency(1);
+        return this.composeResult(result);
+      } catch (error) {
+        if (error instanceof vscode.CancellationError) {
+          throw error;
         }
 
-        const segment = segments[index];
-        const segmentResult = await this.openAIClient.translate({
-          documentText: segment,
-          fileName: `${relativePath}#segment-${index + 1}`,
-          resolvedConfig: context.resolvedConfig,
-          signal: context.signal,
-        });
-
-        providerId = segmentResult.providerId;
-        aggregateLatency += segmentResult.latencyMs;
-        combinedMarkdown.push(segmentResult.markdown.trimEnd());
-
-        handlers?.onSegment?.({
-          segmentIndex: index,
-          totalSegments: segments.length,
-          markdown: segmentResult.markdown,
-          html: renderMarkdownToHtml(segmentResult.markdown),
-          latencyMs: segmentResult.latencyMs,
-          providerId: segmentResult.providerId,
-        });
+        this.logger.error('Translation service failed.', error);
+        throw error instanceof Error ? error : new Error(String(error));
       }
+    };
 
-      const markdown = combinedMarkdown.join('\n\n');
-      const finalResult: RawTranslationResult = {
-        markdown,
-        providerId: providerId ?? context.resolvedConfig.model,
-        latencyMs: aggregateLatency,
-      };
+    if (concurrencyLimit <= 1) {
+      return runSerial();
+    }
 
-      return this.composeResult(finalResult);
+    try {
+      const result = await executeWithConcurrency(concurrencyLimit);
+      return this.composeResult(result);
     } catch (error) {
       if (error instanceof vscode.CancellationError) {
         throw error;
       }
 
-      this.logger.error('Translation service failed.', error);
+      if (!context.configuration.translation.parallelismFallbackEnabled) {
+        this.logger.error('Translation service failed.', error);
+        throw error instanceof Error ? error : new Error(String(error));
+      }
 
-      throw error instanceof Error ? error : new Error(String(error));
+      this.logger.warn(
+        `Parallel translation failed for ${relativePath}; retrying serially.`,
+      );
+      this.logger.event('translation.parallelFallback', {
+        documentPath: relativePath,
+        targetLanguage: context.resolvedConfig.targetLanguage,
+        attemptedConcurrency: concurrencyLimit,
+        error: error instanceof Error ? error.message : String(error),
+      });
+
+      return runSerial();
     }
   }
 
@@ -265,5 +271,144 @@ export class TranslationService {
     pushBuffer();
 
     return merged.length > 0 ? merged : segments;
+  }
+
+  private normalizeConcurrencyLimit(requested: number, segmentCount: number): number {
+    if (!Number.isFinite(requested) || requested < 1) {
+      return 1;
+    }
+
+    const normalized = Math.floor(requested);
+    const maximum = Math.max(segmentCount, 1);
+    return Math.min(Math.max(normalized, 1), maximum);
+  }
+
+  private async executeSegments(
+    segments: string[],
+    context: TranslationRequestContext,
+    handlers: TranslationHandlers | undefined,
+    options: { concurrency: number; relativePath: string },
+  ): Promise<RawTranslationResult> {
+    const totalSegments = segments.length;
+    if (totalSegments === 0) {
+      return {
+        markdown: '',
+        providerId: context.resolvedConfig.model,
+        latencyMs: 0,
+      };
+    }
+
+    const effectiveConcurrency = this.normalizeConcurrencyLimit(options.concurrency, totalSegments);
+    const combinedMarkdown: Array<string | undefined> = new Array(totalSegments);
+    const pending = new Map<
+      number,
+      {
+        markdown: string;
+        html: string;
+        latencyMs: number;
+        providerId: string;
+      }
+    >();
+    let aggregateLatency = 0;
+    let providerId: string | undefined;
+    let nextIndex = 0;
+    let flushIndex = 0;
+    let capturedError: unknown;
+
+    const takeNextIndex = (): number | undefined => {
+      if (capturedError) {
+        return undefined;
+      }
+
+      if (nextIndex >= totalSegments) {
+        return undefined;
+      }
+
+      const index = nextIndex;
+      nextIndex += 1;
+      return index;
+    };
+
+    const flush = () => {
+      while (pending.has(flushIndex)) {
+        const entry = pending.get(flushIndex)!;
+        pending.delete(flushIndex);
+
+        combinedMarkdown[flushIndex] = entry.markdown.trimEnd();
+        aggregateLatency += entry.latencyMs;
+        providerId = entry.providerId;
+
+        handlers?.onSegment?.({
+          segmentIndex: flushIndex,
+          totalSegments,
+          markdown: entry.markdown,
+          html: entry.html,
+          latencyMs: entry.latencyMs,
+          providerId: entry.providerId,
+        });
+
+        flushIndex += 1;
+      }
+    };
+
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const index = takeNextIndex();
+
+        if (index === undefined) {
+          return;
+        }
+
+        if (capturedError) {
+          return;
+        }
+
+        try {
+          if (context.signal?.aborted) {
+            throw new vscode.CancellationError();
+          }
+
+          const segment = segments[index];
+          const segmentResult = await this.openAIClient.translate({
+            documentText: segment,
+            fileName: `${options.relativePath}#segment-${index + 1}`,
+            resolvedConfig: context.resolvedConfig,
+            signal: context.signal,
+          });
+
+          if (context.signal?.aborted) {
+            throw new vscode.CancellationError();
+          }
+
+          pending.set(index, {
+            markdown: segmentResult.markdown,
+            html: renderMarkdownToHtml(segmentResult.markdown),
+            latencyMs: segmentResult.latencyMs,
+            providerId: segmentResult.providerId,
+          });
+
+          flush();
+        } catch (error) {
+          capturedError = error;
+          return;
+        }
+      }
+    };
+
+    const workers = Array.from({ length: effectiveConcurrency }, () => worker());
+    await Promise.all(workers);
+
+    if (capturedError) {
+      throw capturedError;
+    }
+
+    flush();
+
+    const markdown = combinedMarkdown.map((chunk) => chunk ?? '').join('\n\n');
+    return {
+      markdown,
+      providerId: providerId ?? context.resolvedConfig.model,
+      latencyMs: aggregateLatency,
+    };
   }
 }

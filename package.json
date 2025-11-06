@@ -126,6 +126,17 @@
           "type": "boolean",
           "default": false,
           "markdownDescription": "%config.translation.logSegmentMetrics.markdownDescription%"
+        },
+        "babelMdViewer.translation.concurrencyLimit": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "markdownDescription": "%config.translation.concurrencyLimit.markdownDescription%"
+        },
+        "babelMdViewer.translation.parallelFallbackEnabled": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "%config.translation.parallelFallbackEnabled.markdownDescription%"
         }
       }
     }
