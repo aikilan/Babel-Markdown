@@ -1,57 +1,32 @@
 # Babel Markdown
 
-![Babel Markdown logo](assets/icons/logo.png)
+![Babel Markdown 功能预览](assets/images/功能宣传.png)
 
-Babel Markdown is a VS Code extension that renders Markdown files through a Babel-powered transformation pipeline before displaying them inside a preview webview. This repository is initialized with a clean TypeScript setup, testing scaffold, and opinionated linting so you can focus on feature work.
+Babel Markdown 为 VS Code 提供实时翻译预览能力，让原文 Markdown 与 AI 翻译后的内容在同一视图中同步呈现，帮助你高效校对多语言文档。
 
-## Getting Started
+## 主要特性
+- **渐进式翻译预览**：按段落流式更新翻译结果，阅读无需等待整篇完成。
+- **Markdown 结构保真**：保留标题、列表、代码块、表格等格式，翻译内容可直接复制使用。
+- **自适应分段与并行处理**：自动合并短段落并控制并发度，平衡速度与稳定性。
+- **缓存与错误恢复**：复用历史片段并在异常时回退缓存或原文，确保预览不中断。
+- **面向 OpenAI 兼容 API**：自定义 Base URL、模型、语言与超时，兼容第三方服务。
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Build the extension:
-   ```bash
-   npm run compile
-   ```
-3. Launch the extension host (Run Extension configuration) and start iterating.
+## 使用流程
+- 在设置中搜索 “Babel Markdown”，配置翻译 API 基础地址、密钥与目标语言。
+- 打开 Markdown 文档，使用编辑器标题栏按钮或命令面板运行 “Babel Markdown: Open Translation Preview”。
+- 预览面板将显示翻译进度、警告提示与最终结果，可随时刷新或重试。
 
-## Project Structure
+## 可配置项
+- `translation.apiBaseUrl`：OpenAI 兼容接口地址。
+- `translation.apiKey`：翻译请求使用的安全密钥。
+- `translation.model`：模型名称，例如 `gpt-4o-mini`。
+- `translation.targetLanguage`：目标语言代码。
+- `translation.timeoutMs`、`concurrencyLimit`、`retry.maxAttempts` 等高级参数。
+![Babel Markdown 功能预览](assets/images/Snipaste_2025-11-06_16-51-04.png)
 
-```
-.
-├── assets/              # Static assets such as icons
-│   └── icons/
-├── docs/                # Long form documentation and design notes
-├── scripts/             # Automation scripts (formatting, release helpers, etc.)
-├── src/                 # Extension source code (TypeScript)
-│   ├── activation/      # Activation wiring and command registration helpers
-│   ├── commands/        # VS Code command implementations
-│   ├── panel/           # Webview panel orchestration
-│   ├── services/        # Core business logic (Babel transforms, data access)
-│   ├── types/           # Shared TypeScript types/interfaces
-│   └── utils/           # Reusable helpers (logging, config)
-├── test/                # Automated tests using @vscode/test-electron
-│   ├── fixtures/        # Sample documents used in tests
-│   └── suite/           # Test suite entrypoints
-├── .vscode/             # Debugging and task configuration
-├── dist/                # Compiled extension output (generated)
-└── dist-test/           # Compiled test output (generated)
-```
+## 适用场景
+- 本地化、双语技术文档校对。
+- 快速审阅 Markdown 说明、变更日志或 README。
+- 团队协作中需要多语言同步的开发场景。
 
-## Scripts
-
-- `npm run compile` – Type-checks and emits the extension into `dist/`.
-- `npm run watch` – Incremental compilation while you edit.
-- `npm run compile-tests` – Builds the test workspace into `dist-test/`.
-- `npm run test` – Runs the compiled test suite through `@vscode/test-electron`.
-- `npm run lint` – Lints the codebase with ESLint.
-- `npm run check` – Convenience script that lints and tests.
-
-## Next Steps
-
-- Flesh out `BabelMarkdownService` with real transformation logic.
-- Implement a custom webview panel UI for rendering Markdown alongside raw source.
-- Add integration tests that exercise the preview panel and command flow.
-
-Happy hacking!
+立即在 VS Code 中体验 Babel Markdown，感受智能翻译带来的写作提效！
