@@ -2,6 +2,11 @@
 
 All notable changes to the "Babel Markdown" extension will be documented in this file.
 
+## [1.0.7] - 2025-11-07
+- Rebranded the extension as “Babel Markdown”, refreshed README with bilingual product overview and new preview imagery.
+- Added a generated logo asset, wired it into the manifest, and exposed a user-facing translation preview command in the editor context menu.
+- Published updated packages via `pnpm run package` / `vsce publish` with the `aikilan` publisher metadata.
+
 ## [0.0.4] - 2025-11-05
 - Streamlined build/package scripts and added `pnpm run package` for one-step VSIX generation with Vite-bundled artifacts.
 - Added repository metadata and MIT license file to satisfy vsce packaging checks.
