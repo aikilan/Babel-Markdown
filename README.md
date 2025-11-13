@@ -2,7 +2,7 @@
 
 ![Babel Markdown preview](https://raw.githubusercontent.com/xukechu/Babel-Markdown/refs/heads/main/assets/images/Snipaste_2025-11-06_18-16-02.png)
 
-[English](#english) · [中文](#中文)
+[English](#english) · [中文](#中文) · [License](LICENSE)
 
 ## English
 

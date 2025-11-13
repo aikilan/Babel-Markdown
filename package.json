@@ -4,7 +4,7 @@
   "description": "%extension.description%",
   "publisher": "BabelMarkdown",
   "author": "aikilan",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "license": "MIT",
   "icon": "assets/icons/logo.png",
   "repository": {
