@@ -1,0 +1,12 @@
+{
+    "babelMdViewer.translation.apiBaseUrl": "https://api.openai.com/v1",
+    "babelMdViewer.translation.model": "gpt-4o-mini",
+    "babelMdViewer.translation.targetLanguage": "en",
+    "babelMdViewer.translation.timeoutMs": 30000,
+    "babelMdViewer.translation.enableAdaptiveBatching": false,
+    "babelMdViewer.translation.logSegmentMetrics": false,
+    "babelMdViewer.translation.concurrencyLimit": 2,
+    "babelMdViewer.translation.parallelFallbackEnabled": true,
+    "babelMdViewer.translation.retry.maxAttempts": 3,
+    "babelMdViewer.translation.promptTemplate": "You are an expert technical translator. Translate Markdown documents into {{targetLanguage}} while preserving the original Markdown structure, code blocks, inline formatting, tables, and metadata. Do not add commentary."
+}

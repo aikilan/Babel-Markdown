@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { suite, test } from 'mocha';
+import Mocha from 'mocha';
 import * as vscode from 'vscode';
 
 import { SecretStorageService } from '../../src/services/SecretStorageService';
@@ -15,11 +15,21 @@ import type { ExtensionConfiguration, TranslationConfiguration } from '../../src
 import type {
   RawTranslationResult,
   ResolvedTranslationConfiguration,
+  TranslationPrompt,
 } from '../../src/types/translation';
 import { getExtensionConfiguration } from '../../src/utils/config';
 import { ExtensionLogger } from '../../src/utils/logger';
+import { DEFAULT_TRANSLATION_PROMPT } from '../../src/constants/prompts';
 
 const CONFIG_SECTION = 'babelMdViewer';
+const DEFAULT_TEST_PROMPT: TranslationPrompt = {
+  instructions: DEFAULT_TRANSLATION_PROMPT,
+  source: 'default',
+  fingerprint: 'test-default-prompt',
+};
+
+const mocha = new Mocha({ ui: 'bdd', timeout: 60000 });
+mocha.suite.emit('pre-require', globalThis, __filename, mocha);
 
 class InMemorySecretStorage implements vscode.SecretStorage {
   private readonly storageMap = new Map<string, string>();
@@ -50,15 +60,15 @@ class InMemoryTextDocument {
   constructor(public readonly uri: vscode.Uri, public version: number) {}
 }
 
-suite('Configuration Helper', () => {
+describe('Configuration Helper', () => {
   let originalConfig: TranslationConfiguration | undefined;
 
-  suiteSetup(() => {
+  before(() => {
     const extensionConfig = getExtensionConfiguration();
     originalConfig = extensionConfig.translation;
   });
 
-  suiteTeardown(async () => {
+  after(async () => {
     const configuration = vscode.workspace.getConfiguration(CONFIG_SECTION);
 
     await configuration.update(
@@ -111,9 +121,14 @@ suite('Configuration Helper', () => {
       originalConfig?.retryMaxAttempts,
       vscode.ConfigurationTarget.Workspace,
     );
+    await configuration.update(
+      'translation.promptTemplate',
+      originalConfig?.promptTemplate,
+      vscode.ConfigurationTarget.Workspace,
+    );
   });
 
-  test('reads translation configuration with overrides', async () => {
+  it('reads translation configuration with overrides', async () => {
     const configuration = vscode.workspace.getConfiguration(CONFIG_SECTION);
 
     await configuration.update(
@@ -166,6 +181,11 @@ suite('Configuration Helper', () => {
       4,
       vscode.ConfigurationTarget.Workspace,
     );
+    await configuration.update(
+      'translation.promptTemplate',
+      'Custom prompt instructions',
+      vscode.ConfigurationTarget.Workspace,
+    );
 
     const result = getExtensionConfiguration();
 
@@ -179,11 +199,12 @@ suite('Configuration Helper', () => {
     assert.strictEqual(result.translation.concurrencyLimit, 3);
     assert.strictEqual(result.translation.parallelismFallbackEnabled, false);
     assert.strictEqual(result.translation.retryMaxAttempts, 4);
+    assert.strictEqual(result.translation.promptTemplate, 'Custom prompt instructions');
   });
 });
 
-suite('SecretStorageService', () => {
-  test('stores, retrieves and clears translation api key', async () => {
+describe('SecretStorageService', () => {
+  it('stores, retrieves and clears translation api key', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Secret Test)');
     const storage = new InMemorySecretStorage();
     const service = new SecretStorageService(storage, logger);
@@ -202,8 +223,9 @@ suite('SecretStorageService', () => {
   });
 });
 
-suite('TranslationCache', () => {
-  test('stores and retrieves cache entries within ttl', () => {
+describe('TranslationCache', () => {
+  const promptFingerprint = DEFAULT_TEST_PROMPT.fingerprint;
+  it('stores and retrieves cache entries within ttl', () => {
     const cache = new TranslationCache({ ttlMs: 1000, maxEntries: 2 });
     const doc = new InMemoryTextDocument(vscode.Uri.parse('file:///doc.md'), 1);
     const config = {
@@ -221,13 +243,13 @@ suite('TranslationCache', () => {
       latencyMs: 42,
     };
 
-    cache.set(doc, config, result);
+  cache.set(doc, config, promptFingerprint, result);
 
-    const cached = cache.get(doc, config);
+  const cached = cache.get(doc, config, promptFingerprint);
     assert.deepStrictEqual(cached, result);
   });
 
-  test('evicts entries when ttl expires', async () => {
+  it('evicts entries when ttl expires', async () => {
     const cache = new TranslationCache({ ttlMs: 10, maxEntries: 2 });
     const doc = new InMemoryTextDocument(vscode.Uri.parse('file:///doc.md'), 1);
     const config = {
@@ -245,14 +267,14 @@ suite('TranslationCache', () => {
       latencyMs: 42,
     };
 
-    cache.set(doc, config, result);
+  cache.set(doc, config, promptFingerprint, result);
     await new Promise((resolve) => setTimeout(resolve, 15));
 
-    const cached = cache.get(doc, config);
+  const cached = cache.get(doc, config, promptFingerprint);
     assert.strictEqual(cached, undefined);
   });
 
-  test('evicts oldest entry when exceeding max entries', () => {
+  it('evicts oldest entry when exceeding max entries', () => {
     const cache = new TranslationCache({ ttlMs: 1000, maxEntries: 1 });
     const docA = new InMemoryTextDocument(vscode.Uri.parse('file:///a.md'), 1);
     const docB = new InMemoryTextDocument(vscode.Uri.parse('file:///b.md'), 1);
@@ -277,17 +299,17 @@ suite('TranslationCache', () => {
       latencyMs: 20,
     };
 
-    cache.set(docA, config, resultA);
-    cache.set(docB, config, resultB);
+  cache.set(docA, config, promptFingerprint, resultA);
+  cache.set(docB, config, promptFingerprint, resultB);
 
-    const cachedA = cache.get(docA, config);
-    const cachedB = cache.get(docB, config);
+  const cachedA = cache.get(docA, config, promptFingerprint);
+  const cachedB = cache.get(docB, config, promptFingerprint);
 
     assert.strictEqual(cachedA, undefined);
     assert.deepStrictEqual(cachedB, resultB);
   });
 
-  test('stores and retrieves segment cache entries', () => {
+  it('stores and retrieves segment cache entries', () => {
     const cache = new TranslationCache({ ttlMs: 1000, maxEntries: 2 });
     const doc = new InMemoryTextDocument(vscode.Uri.parse('file:///doc.md'), 1);
     const config: ResolvedTranslationConfiguration = {
@@ -305,21 +327,21 @@ suite('TranslationCache', () => {
       latencyMs: 12,
     };
 
-    cache.setSegment(doc, config, segment, result);
+  cache.setSegment(doc, config, segment, promptFingerprint, result);
 
-    const hit = cache.getSegment(doc, config, segment);
+  const hit = cache.getSegment(doc, config, segment, promptFingerprint);
     assert.ok(hit);
     assert.strictEqual(hit?.markdown, result.markdown);
     assert.strictEqual(hit?.providerId, result.providerId);
 
     cache.clearForDocument(doc);
-    const afterClear = cache.getSegment(doc, config, segment);
+  const afterClear = cache.getSegment(doc, config, segment, promptFingerprint);
     assert.strictEqual(afterClear, undefined);
   });
 });
 
-suite('Babel Markdown Service', () => {
-  test('returns escaped HTML for markdown content', async () => {
+describe('Babel Markdown Service', () => {
+  it('returns escaped HTML for markdown content', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Test)');
     const service = new BabelMarkdownService(logger);
 
@@ -335,7 +357,7 @@ suite('Babel Markdown Service', () => {
   });
 });
 
-suite('TranslationService', () => {
+describe('TranslationService', () => {
   const configuration: ExtensionConfiguration = {
     previewTheme: 'light',
     transformPlugins: [],
@@ -350,9 +372,9 @@ suite('TranslationService', () => {
       concurrencyLimit: 1,
       parallelismFallbackEnabled: true,
       retryMaxAttempts: 3,
+      promptTemplate: DEFAULT_TRANSLATION_PROMPT,
     },
   };
-
   const resolvedConfig: ResolvedTranslationConfiguration = {
     apiBaseUrl: configuration.translation.apiBaseUrl,
     apiKey: 'sk-test',
@@ -361,7 +383,7 @@ suite('TranslationService', () => {
     timeoutMs: configuration.translation.timeoutMs,
   };
 
-  test('returns rendered html alongside markdown result', async () => {
+  it('returns rendered html alongside markdown result', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Translation Test)');
     const stubResponse: RawTranslationResult = {
       markdown: '**Hello** <script>alert(1)</script>',
@@ -383,6 +405,7 @@ suite('TranslationService', () => {
       document,
       configuration,
       resolvedConfig,
+      prompt: DEFAULT_TEST_PROMPT,
     });
 
     assert.strictEqual(result.markdown, stubResponse.markdown);
@@ -394,7 +417,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('emits placeholder content when translation fails without cache', async () => {
+  it('emits placeholder content when translation fails without cache', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Translation Error Test)');
     let attemptCount = 0;
     const client: Partial<OpenAITranslationClient> = {
@@ -425,6 +448,7 @@ suite('TranslationService', () => {
         document,
         configuration: fallbackConfiguration,
         resolvedConfig,
+        prompt: DEFAULT_TEST_PROMPT,
         cache: new TranslationCache(),
       },
       {
@@ -445,7 +469,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('strips wrapping markdown fences from provider response', async () => {
+  it('strips wrapping markdown fences from provider response', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Fence Strip Test)');
     const client: Partial<OpenAITranslationClient> = {
       translate: async (): Promise<RawTranslationResult> => ({
@@ -465,6 +489,7 @@ suite('TranslationService', () => {
       document,
       configuration,
       resolvedConfig,
+      prompt: DEFAULT_TEST_PROMPT,
       cache: new TranslationCache(),
     });
 
@@ -474,7 +499,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('strips wrapping fences when served from segment cache', async () => {
+  it('strips wrapping fences when served from segment cache', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Fence Cache Strip Test)');
     const cache = new TranslationCache({ ttlMs: 1000 });
     const client: Partial<OpenAITranslationClient> = {
@@ -489,7 +514,7 @@ suite('TranslationService', () => {
       content: 'Paragraph to translate.',
     });
 
-    cache.setSegment(document, resolvedConfig, 'Paragraph to translate.', {
+  cache.setSegment(document, resolvedConfig, 'Paragraph to translate.', DEFAULT_TEST_PROMPT.fingerprint, {
       markdown: '```markdown\ncached translation\n```',
       providerId: 'cached-provider',
       latencyMs: 3,
@@ -499,6 +524,7 @@ suite('TranslationService', () => {
       document,
       configuration,
       resolvedConfig,
+      prompt: DEFAULT_TEST_PROMPT,
       cache,
     });
 
@@ -508,7 +534,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('preserves code fences when source segment is a code block', async () => {
+  it('preserves code fences when source segment is a code block', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Fence Preserve Test)');
     const client: Partial<OpenAITranslationClient> = {
       translate: async (): Promise<RawTranslationResult> => ({
@@ -528,6 +554,7 @@ suite('TranslationService', () => {
       document,
       configuration,
       resolvedConfig,
+      prompt: DEFAULT_TEST_PROMPT,
     });
 
     assert.strictEqual(result.markdown.trim(), '```typescript\nconst value = 1;\n```');
@@ -536,7 +563,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('raises structured error on authentication failure', async () => {
+  it('raises structured error on authentication failure', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Auth Error Test)');
     const client: Partial<OpenAITranslationClient> = {
       translate: async (): Promise<RawTranslationResult> => {
@@ -558,6 +585,7 @@ suite('TranslationService', () => {
         document,
         configuration,
         resolvedConfig,
+        prompt: DEFAULT_TEST_PROMPT,
         cache: new TranslationCache(),
       }),
       (error: unknown) => {
@@ -570,7 +598,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('invokes segment handler for each translated paragraph', async () => {
+  it('invokes segment handler for each translated paragraph', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Translation Segments Test)');
     let callCount = 0;
     const client: Partial<OpenAITranslationClient> = {
@@ -597,6 +625,7 @@ suite('TranslationService', () => {
         document,
         configuration,
         resolvedConfig,
+        prompt: DEFAULT_TEST_PROMPT,
       },
       {
         onSegment: (update) => {
@@ -616,7 +645,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('adaptive batching merges short segments when enabled', async () => {
+  it('adaptive batching merges short segments when enabled', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Adaptive Segments Test)');
     let callCount = 0;
     const translatedSegments: string[] = [];
@@ -653,6 +682,7 @@ suite('TranslationService', () => {
         document,
         configuration: adaptiveConfiguration,
         resolvedConfig,
+        prompt: DEFAULT_TEST_PROMPT,
       },
       {
         onSegment: (update) => {
@@ -670,7 +700,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('parallel scheduler preserves segment order', async () => {
+  it('parallel scheduler preserves segment order', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Parallel Order Test)');
     const callOrder: number[] = [];
     const emissionOrder: number[] = [];
@@ -714,6 +744,7 @@ suite('TranslationService', () => {
         document,
         configuration: parallelConfiguration,
         resolvedConfig,
+        prompt: DEFAULT_TEST_PROMPT,
       },
       {
         onSegment: (update) => {
@@ -739,7 +770,7 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 
-  test('parallel scheduler falls back to serial on failure when enabled', async () => {
+  it('parallel scheduler surfaces placeholder recovery on failure when enabled', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Parallel Fallback Test)');
     const failureCounts = new Map<number, number>();
     const segmentUpdates = new Map<number, string>();
@@ -782,6 +813,7 @@ suite('TranslationService', () => {
         document,
         configuration: fallbackConfiguration,
         resolvedConfig,
+        prompt: DEFAULT_TEST_PROMPT,
       },
       {
         onSegment: (update) => {
@@ -792,15 +824,17 @@ suite('TranslationService', () => {
 
     assert.strictEqual(failureCounts.get(1), 1);
     assert.strictEqual(segmentUpdates.size, 3);
-    assert.strictEqual(segmentUpdates.get(1)?.startsWith('final-1'), true);
+    const secondSegment = segmentUpdates.get(1);
+    assert.ok(secondSegment?.startsWith('> Translation failed'));
     assert.strictEqual(result.markdown.includes('final-0'), true);
-    assert.strictEqual(result.markdown.includes('final-1'), true);
+    assert.strictEqual(result.markdown.includes('final-1'), false);
     assert.strictEqual(result.markdown.includes('final-2'), true);
+    assert.strictEqual(result.recoveries?.some((entry) => entry.type === 'placeholder'), true);
 
     logger.dispose();
   });
 
-  test('segment cache prevents repeated provider calls', async () => {
+  it('segment cache prevents repeated provider calls', async () => {
   const logger = new ExtensionLogger('Babel Markdown (Segment Cache Test)');
     const cache = new TranslationCache({ ttlMs: 1000 });
     let callCount = 0;
@@ -835,6 +869,7 @@ suite('TranslationService', () => {
         document,
         configuration: cachedConfiguration,
         resolvedConfig,
+        prompt: DEFAULT_TEST_PROMPT,
         cache,
       },
       {
@@ -850,6 +885,7 @@ suite('TranslationService', () => {
         document,
         configuration: cachedConfiguration,
         resolvedConfig,
+        prompt: DEFAULT_TEST_PROMPT,
         cache,
       },
       {
@@ -868,3 +904,19 @@ suite('TranslationService', () => {
     logger.dispose();
   });
 });
+
+export async function run(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      mocha.run((failures) => {
+        if (failures > 0) {
+          reject(new Error(`${failures} tests failed.`));
+        } else {
+          resolve();
+        }
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}

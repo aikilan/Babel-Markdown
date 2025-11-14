@@ -167,7 +167,7 @@
     "watch": "tsc -watch -p tsconfig.json",
     "watch-tests": "tsc -watch -p tsconfig.test.json",
     "lint": "eslint ./src ./test --ext .ts",
-    "test": "npm run compile && npm run compile-tests && node ./dist-test/runTest.js",
+  "test": "npm run compile && npm run compile-tests && node ./dist-test/test/runTest.js",
     "check": "npm run lint && npm run test"
   },
   "devDependencies": {
