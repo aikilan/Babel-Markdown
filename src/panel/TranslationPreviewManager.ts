@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { basename } from 'path';
 
 import type { ExtensionConfiguration } from '../types/config';
 import type { ResolvedTranslationConfiguration } from '../types/translation';
@@ -8,6 +9,7 @@ import { PromptResolver } from '../services/PromptResolver';
 import type { HostToWebviewMessage, WebviewToHostMessage } from '../messaging/channel';
 import { getWebviewLocaleBundle, localize } from '../i18n/localize';
 import { ExtensionLogger } from '../utils/logger';
+import { MarkdownExportService } from '../services/MarkdownExportService';
 
 interface PreviewEntry {
   panel: vscode.WebviewPanel;
@@ -48,6 +50,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
     private readonly extensionUri: vscode.Uri,
     private readonly translationService: TranslationService,
     private readonly promptResolver: PromptResolver,
+    private readonly exportService: MarkdownExportService,
     private readonly logger: ExtensionLogger,
   ) {
     this.disposables.push(
@@ -130,6 +133,9 @@ export class TranslationPreviewManager implements vscode.Disposable {
           break;
         case 'requestRetry':
           void this.render(previewEntry.panel, previewEntry.context, { force: true, invalidateCache: true });
+          break;
+        case 'exportContent':
+          void this.handleExportRequest(message.payload, previewEntry);
           break;
         default:
           this.logger.warn(`Unhandled message from webview: ${(message as { type: string }).type}`);
@@ -485,6 +491,9 @@ export class TranslationPreviewManager implements vscode.Disposable {
     const scriptUri = webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'translationPreview.js'),
     );
+    const exportScriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'exportBridge.js'),
+    );
     const nonce = this.createNonce();
     const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
     const localeBundle = getWebviewLocaleBundle();
@@ -579,6 +588,40 @@ export class TranslationPreviewManager implements vscode.Disposable {
       cursor: not-allowed;
     }
 
+    .preview__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .preview__exportButton {
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      border-radius: 4px;
+      border: 1px solid var(--vscode-button-border, transparent);
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      cursor: pointer;
+      transition: background 150ms ease;
+    }
+
+    .preview__exportButton:hover:not([disabled]) {
+      background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+    }
+
+    .preview__exportButton[disabled] {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .preview__exportError {
+      flex: 1 1 100%;
+      margin: 0;
+      font-size: 0.85rem;
+      color: var(--vscode-inputValidation-errorForeground);
+    }
+
     .preview__error {
       margin: 0;
       padding: 12px 16px;
@@ -668,6 +711,17 @@ export class TranslationPreviewManager implements vscode.Disposable {
   <main>
     <header class="preview__header">
       <p id="preview-status" class="preview__status" role="status" aria-live="polite" data-state="idle"></p>
+      <div class="preview__actions">
+        <button type="button" class="preview__exportButton" data-export-format="png">${escapeHtml(
+          localeBundle.exportControls.imageButtonLabel,
+        )}</button>
+        <button type="button" class="preview__exportButton" data-export-format="pdf">${escapeHtml(
+          localeBundle.exportControls.pdfButtonLabel,
+        )}</button>
+        <span id="preview-export-error" class="preview__exportError" hidden>${escapeHtml(
+          localeBundle.exportControls.failureMessage,
+        )}</span>
+      </div>
       <button id="preview-retry" class="preview__retry" type="button" hidden>${escapeHtml(
         localeBundle.retryButtonLabel,
       )}</button>
@@ -678,6 +732,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
       localeBundle.ariaContentLabel,
     )}"></article>
   </main>
+  <script nonce="${nonce}" src="${exportScriptUri}"></script>
   <script nonce="${nonce}">window.__babelMdViewerLocale=${localeJson};</script>
   <script nonce="${nonce}" src="${scriptUri}"></script>
 </body>
@@ -700,6 +755,31 @@ export class TranslationPreviewManager implements vscode.Disposable {
       undefined,
       (error) => this.logger.error('Failed to post message to translation webview.', error),
     );
+  }
+
+  private async handleExportRequest(
+    payload: Extract<WebviewToHostMessage, { type: 'exportContent' }>['payload'],
+    previewEntry: PreviewEntry,
+  ): Promise<void> {
+    await this.exportService.export({
+      format: payload.format,
+      dataUri: payload.dataUrl,
+      width: payload.width,
+      height: payload.height,
+      documentUri: previewEntry.context.document.uri,
+      fileNameHint: this.buildTranslationFileName(previewEntry.context),
+    });
+  }
+
+  private buildTranslationFileName(context: RenderContext): string {
+    const baseName =
+      context.document.uri.scheme === 'file'
+        ? basename(context.document.uri.fsPath)
+        : basename(context.document.uri.path);
+    const index = baseName.lastIndexOf('.');
+    const stripped = index >= 0 ? baseName.slice(0, index) : baseName;
+    const language = context.resolvedConfig.targetLanguage || 'translation';
+    return `${stripped}-${language}-translation`;
   }
 
   private registerScrollListener(key: string): void {

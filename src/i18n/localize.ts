@@ -167,9 +167,53 @@ const translations = {
     en: 'Preview Error',
     'zh-cn': '预览错误',
   },
+  'preview.exportImageButton': {
+    en: 'Export as PNG',
+    'zh-cn': '导出为 PNG',
+  },
+  'preview.exportPdfButton': {
+    en: 'Export as PDF',
+    'zh-cn': '导出为 PDF',
+  },
+  'preview.exportError': {
+    en: 'Unable to prepare the preview for export.',
+    'zh-cn': '无法准备预览导出。',
+  },
+  'preview.exportInProgress': {
+    en: 'Preparing export…',
+    'zh-cn': '正在准备导出…',
+  },
   'common.unknownError': {
     en: 'Unknown error',
     'zh-cn': '未知错误',
+  },
+  'export.fileFilter.image': {
+    en: 'PNG Image',
+    'zh-cn': 'PNG 图像',
+  },
+  'export.fileFilter.pdf': {
+    en: 'PDF Document',
+    'zh-cn': 'PDF 文档',
+  },
+  'export.saveLabel.image': {
+    en: 'Save PNG',
+    'zh-cn': '保存 PNG',
+  },
+  'export.saveLabel.pdf': {
+    en: 'Save PDF',
+    'zh-cn': '保存 PDF',
+  },
+  'export.success.image': {
+    en: 'Saved preview as PNG: {path}',
+    'zh-cn': '已将预览保存为 PNG：{path}',
+  },
+  'export.success.pdf': {
+    en: 'Saved preview as PDF: {path}',
+    'zh-cn': '已将预览保存为 PDF：{path}',
+  },
+  'export.failure.generic': {
+    en: 'Failed to export preview. Check logs for details.',
+    'zh-cn': '导出预览失败。请查看日志了解详情。',
   },
   'webview.statusInProgress': {
     en: 'Translating {document} → {language}{progress}…',
@@ -201,7 +245,23 @@ const translations = {
   },
   'webview.warning.placeholder': {
     en: 'Showing original text for {count} segment(s) because translation failed.',
-    'zh-cn': '因翻译失败，{count} 个片段显示原始文本。',
+    'zh-cn': '因翻译失败，{count} 个片段显示原文。',
+  },
+  'webview.export.imageButton': {
+    en: 'Save as PNG',
+    'zh-cn': '保存为 PNG',
+  },
+  'webview.export.pdfButton': {
+    en: 'Save as PDF',
+    'zh-cn': '保存为 PDF',
+  },
+  'webview.export.error': {
+    en: 'Unable to capture the preview for export.',
+    'zh-cn': '无法捕获预览用于导出。',
+  },
+  'webview.export.inProgress': {
+    en: 'Preparing export…',
+    'zh-cn': '正在准备导出…',
   },
   'webview.meta.cached': {
     en: 'cached',
@@ -288,6 +348,12 @@ export interface WebviewLocaleBundle {
     cachedLabel: string;
     recoveredLabel: string;
   };
+  exportControls: {
+    imageButtonLabel: string;
+    pdfButtonLabel: string;
+    failureMessage: string;
+    inProgressMessage: string;
+  };
 }
 
 export function getWebviewLocaleBundle(language?: string): WebviewLocaleBundle {
@@ -315,6 +381,12 @@ export function getWebviewLocaleBundle(language?: string): WebviewLocaleBundle {
     meta: {
       cachedLabel: localize('webview.meta.cached', undefined, { language }),
       recoveredLabel: localize('webview.meta.recovered', undefined, { language }),
+    },
+    exportControls: {
+      imageButtonLabel: localize('webview.export.imageButton', undefined, { language }),
+      pdfButtonLabel: localize('webview.export.pdfButton', undefined, { language }),
+      failureMessage: localize('webview.export.error', undefined, { language }),
+      inProgressMessage: localize('webview.export.inProgress', undefined, { language }),
     },
   };
 }

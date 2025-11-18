@@ -158,7 +158,7 @@
     "vscode:prepublish": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build:extension": "vite build --config vite.config.extension.mjs",
-    "build:webview": "vite build --config vite.config.webview.mjs",
+    "build:webview": "vite build --config vite.config.webview.mjs && vite build --config vite.config.exportBridge.mjs",
     "build": "pnpm run typecheck && pnpm run build:extension && pnpm run build:webview",
     "compile": "pnpm run build",
     "package": "pnpm run build && pnpm exec vsce package --no-dependencies",
@@ -167,7 +167,7 @@
     "watch": "tsc -watch -p tsconfig.json",
     "watch-tests": "tsc -watch -p tsconfig.test.json",
     "lint": "eslint ./src ./test --ext .ts",
-  "test": "npm run compile && npm run compile-tests && node ./dist-test/test/runTest.js",
+    "test": "npm run compile && npm run compile-tests && node ./dist-test/test/runTest.js",
     "check": "npm run lint && npm run test"
   },
   "devDependencies": {
@@ -189,7 +189,9 @@
     "vite": "^7.2.0"
   },
   "dependencies": {
+    "html-to-image": "^1.11.13",
     "markdown-it": "^14.1.0",
+    "pdf-lib": "^1.17.1",
     "sanitize-html": "^2.17.0"
   }
 }

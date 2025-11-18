@@ -85,6 +85,15 @@ export type WebviewToHostMessage =
       type: 'requestRetry';
     }
   | {
+      type: 'exportContent';
+      payload: {
+        format: 'png' | 'pdf';
+        dataUrl: string;
+        width: number;
+        height: number;
+      };
+    }
+  | {
       type: 'log';
       payload: {
         level: 'info' | 'warn' | 'error';

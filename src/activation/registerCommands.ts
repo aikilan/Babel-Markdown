@@ -13,11 +13,18 @@ import { OpenAITranslationClient } from '../services/OpenAITranslationClient';
 import { TranslationService } from '../services/TranslationService';
 import { PromptResolver } from '../services/PromptResolver';
 import { ExtensionLogger } from '../utils/logger';
+import { MarkdownExportService } from '../services/MarkdownExportService';
 
 export function registerCommands(context: vscode.ExtensionContext): vscode.Disposable[] {
   const logger = new ExtensionLogger();
   const service = new BabelMarkdownService(logger);
-  const previewPanel = new MarkdownPreviewPanel(context.extensionUri, service, logger);
+  const exportService = new MarkdownExportService(logger);
+  const previewPanel = new MarkdownPreviewPanel(
+    context.extensionUri,
+    service,
+    exportService,
+    logger,
+  );
   const secretStorageService = new SecretStorageService(context.secrets, logger);
   const openAIClient = new OpenAITranslationClient(logger);
   const translationService = new TranslationService(logger, openAIClient);
@@ -26,6 +33,7 @@ export function registerCommands(context: vscode.ExtensionContext): vscode.Dispo
     context.extensionUri,
     translationService,
     promptResolver,
+    exportService,
     logger,
   );
 

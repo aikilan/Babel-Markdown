@@ -29,11 +29,24 @@ type WebviewLocaleBundle = {
     cachedLabel: string;
     recoveredLabel: string;
   };
+  exportControls: {
+    imageButtonLabel: string;
+    pdfButtonLabel: string;
+    failureMessage: string;
+    inProgressMessage: string;
+  };
 };
 
 declare global {
   interface Window {
     __babelMdViewerLocale?: WebviewLocaleBundle;
+    __babelMdViewerExport?: {
+      captureElement(element: HTMLElement): Promise<{
+        dataUrl: string;
+        width: number;
+        height: number;
+      }>;
+    };
   }
 }
 
@@ -59,6 +72,12 @@ const FALLBACK_LOCALE: WebviewLocaleBundle = {
   meta: {
     cachedLabel: 'cached',
     recoveredLabel: 'warnings',
+  },
+  exportControls: {
+    imageButtonLabel: 'Save as PNG',
+    pdfButtonLabel: 'Save as PDF',
+    failureMessage: 'Unable to capture the preview for export.',
+    inProgressMessage: 'Preparing export…',
   },
 };
 
@@ -96,6 +115,10 @@ const statusElement = document.getElementById('preview-status');
 const errorElement = document.getElementById('preview-error');
 const warningElement = document.getElementById('preview-warning');
 const retryElement = document.getElementById('preview-retry');
+const exportButtonElements = Array.from(
+  document.querySelectorAll<HTMLButtonElement>('[data-export-format]'),
+);
+const exportErrorElement = document.getElementById('preview-export-error');
 
 if (!(outputElement instanceof HTMLElement)) {
   throw new Error('Translation preview DOM failed to initialize: preview-content.');
@@ -117,14 +140,28 @@ if (!(retryElement instanceof HTMLButtonElement)) {
   throw new Error('Translation preview DOM failed to initialize: preview-retry.');
 }
 
+for (const button of exportButtonElements) {
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error('Translation preview DOM failed to initialize: export button.');
+  }
+}
+
+if (exportErrorElement && !(exportErrorElement instanceof HTMLElement)) {
+  throw new Error('Translation preview DOM failed to initialize: export error element.');
+}
+
 const outputContainer = outputElement;
 const statusContainer = statusElement;
 const errorContainer = errorElement;
 const warningContainer = warningElement;
 const retryButton = retryElement;
+const exportButtons = exportButtonElements;
+const exportErrorArea = exportErrorElement instanceof HTMLElement ? exportErrorElement : undefined;
 
 retryButton.textContent = locale.retryButtonLabel;
 outputContainer.setAttribute('aria-label', locale.ariaContentLabel);
+disableExportButtons(false);
+setExportMessage(false);
 
 function postMessage(message: WebviewToHostMessage): void {
   vscodeApi.postMessage(message);
@@ -135,6 +172,7 @@ let lastTargetLanguage = '';
 let pendingRetry = false;
 let totalSegments = 0;
 let completedSegments = 0;
+let exportInProgress = false;
 
 function resetStreamingState(): void {
   totalSegments = 0;
@@ -158,6 +196,7 @@ function renderSourceSegments(
   warningContainer.textContent = '';
   retryButton.hidden = true;
   retryButton.disabled = true;
+  setExportMessage(false);
 
   outputContainer.innerHTML = '';
 
@@ -216,8 +255,67 @@ function setLoading(
     retryButton.disabled = true;
     warningContainer.hidden = true;
     warningContainer.textContent = '';
+    setExportMessage(false);
+    disableExportButtons(true);
   } else if (!pendingRetry) {
     statusContainer.textContent = '';
+    disableExportButtons(false);
+  }
+}
+
+function disableExportButtons(isDisabled: boolean): void {
+  for (const button of exportButtons) {
+    button.disabled = isDisabled;
+  }
+}
+
+function setExportMessage(isVisible: boolean, message?: string): void {
+  if (!exportErrorArea) {
+    return;
+  }
+
+  if (!isVisible) {
+    exportErrorArea.hidden = true;
+    return;
+  }
+
+  exportErrorArea.textContent = message ?? locale.exportControls.failureMessage;
+  exportErrorArea.hidden = false;
+}
+
+async function requestExport(format: 'png' | 'pdf'): Promise<void> {
+  if (exportInProgress) {
+    return;
+  }
+
+  if (!window.__babelMdViewerExport?.captureElement) {
+    setExportMessage(true);
+    return;
+  }
+
+  exportInProgress = true;
+  disableExportButtons(true);
+  setExportMessage(true, locale.exportControls.inProgressMessage);
+
+  try {
+    const result = await window.__babelMdViewerExport.captureElement(outputContainer);
+    postMessage({
+      type: 'exportContent',
+      payload: {
+        format,
+        dataUrl: result.dataUrl,
+        width: result.width,
+        height: result.height,
+      },
+    });
+    setExportMessage(false);
+  } catch (error) {
+    const details = error instanceof Error ? error.message : String(error);
+    console.error(`Export failed: ${details}`);
+    setExportMessage(true);
+  } finally {
+    exportInProgress = false;
+    disableExportButtons(false);
   }
 }
 
@@ -465,6 +563,15 @@ document.addEventListener('scroll', () => {
     postMessage({ type: 'requestScrollSync', payload: { fraction } });
   });
 });
+
+for (const button of exportButtons) {
+  button.addEventListener('click', () => {
+    const format = button.dataset.exportFormat;
+    if (format === 'png' || format === 'pdf') {
+      void requestExport(format);
+    }
+  });
+}
 
 retryButton.addEventListener('click', () => {
   if (pendingRetry) {

@@ -1,8 +1,22 @@
 import * as vscode from 'vscode';
+import { basename } from 'path';
 
 import type { BabelMarkdownService, TransformationResult } from '../services/BabelMarkdownService';
 import { getLanguageTag, localize } from '../i18n/localize';
 import { ExtensionLogger } from '../utils/logger';
+import { MarkdownExportService } from '../services/MarkdownExportService';
+
+type ExportFormat = 'png' | 'pdf';
+
+type MarkdownPreviewMessage = {
+  type: 'exportContent';
+  payload: {
+    format: ExportFormat;
+    dataUrl: string;
+    width: number;
+    height: number;
+  };
+};
 
 export class MarkdownPreviewPanel implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
@@ -14,6 +28,7 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly service: BabelMarkdownService,
+    private readonly exportService: MarkdownExportService,
     private readonly logger: ExtensionLogger,
   ) {}
 
@@ -74,6 +89,13 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
 
     panel.iconPath = vscode.Uri.joinPath(this.extensionUri, 'assets', 'icons', 'preview.svg');
     panel.onDidDispose(() => this.handlePanelDispose(), null, this.disposables);
+    panel.webview.onDidReceiveMessage(
+      (message: MarkdownPreviewMessage) => {
+        void this.handleWebviewMessage(message);
+      },
+      undefined,
+      this.disposables,
+    );
 
     return panel;
   }
@@ -91,25 +113,35 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
       }
 
       this.lastRenderedHash = result.contentHash;
-      this.panel.webview.html = this.buildHtml(result);
+    this.panel.webview.html = this.buildHtml(this.panel.webview, result);
     } catch (error) {
       this.logger.error('Failed to transform Markdown document.', error);
       this.panel.webview.html = this.buildErrorHtml(error);
     }
   }
 
-  private buildHtml(result: TransformationResult): string {
+  private buildHtml(webview: vscode.Webview, result: TransformationResult): string {
     const isDark = result.theme === 'dark';
     const background = isDark ? '#1e1e1e' : '#ffffff';
     const foreground = isDark ? '#d4d4d4' : '#1e1e1e';
     const border = isDark ? '#2d2d2d' : '#e5e5e5';
     const languageTag = getLanguageTag();
     const title = this.escapeHtml(localize('preview.markdownHtmlTitle'));
+    const exportImageLabel = this.escapeHtml(localize('preview.exportImageButton'));
+    const exportPdfLabel = this.escapeHtml(localize('preview.exportPdfButton'));
+    const exportError = this.escapeHtml(localize('preview.exportError'));
+    const exportBusy = this.escapeHtml(localize('preview.exportInProgress'));
+    const exportScriptUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'exportBridge.js'),
+    );
+    const nonce = this.createNonce();
+    const csp = `default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};`;
 
     return `<!DOCTYPE html>
 <html lang="${this.escapeHtml(languageTag)}">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="${csp}" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${title}</title>
   <style>
@@ -136,6 +168,49 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
       box-shadow: ${isDark ? 'none' : '0 10px 24px rgba(15, 23, 42, 0.08)'};
     }
 
+    header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .preview-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .preview-actions__button {
+      padding: 6px 14px;
+      border-radius: 4px;
+      border: 1px solid ${isDark ? '#3a3d41' : '#d4d4d4'};
+      background: ${isDark ? '#2d2d30' : '#f3f3f3'};
+      color: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: background 150ms ease;
+    }
+
+    .preview-actions__button:hover:not([disabled]) {
+      background: ${isDark ? '#3e3e42' : '#e5e5e5'};
+    }
+
+    .preview-actions__button[disabled] {
+      opacity: 0.6;
+      cursor: wait;
+    }
+
+    .preview-actions__error {
+      flex: 1 1 100%;
+      margin: 0;
+      color: ${isDark ? '#f28b82' : '#9b2226'};
+      font-size: 0.85rem;
+    }
+
     pre {
       white-space: pre-wrap;
       word-break: break-word;
@@ -148,8 +223,89 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
 </head>
 <body>
   <main>
-    ${result.html}
+    <header>
+      <div class="preview-actions">
+        <button type="button" class="preview-actions__button" data-export-format="png">${exportImageLabel}</button>
+        <button type="button" class="preview-actions__button" data-export-format="pdf">${exportPdfLabel}</button>
+        <span id="preview-export-error" class="preview-actions__error" hidden>${exportError}</span>
+      </div>
+    </header>
+    <section id="preview-root">
+      ${result.html}
+    </section>
   </main>
+  <script nonce="${nonce}" src="${exportScriptUri}"></script>
+  <script nonce="${nonce}">
+    (function() {
+      const vscode = acquireVsCodeApi();
+      const exportButtons = Array.from(document.querySelectorAll('[data-export-format]'));
+      const errorElement = document.getElementById('preview-export-error');
+      const exportContainer = document.getElementById('preview-root');
+      const busyLabel = '${exportBusy}';
+      const defaultError = '${exportError}';
+
+      if (!(exportContainer instanceof HTMLElement)) {
+        return;
+      }
+
+      function setBusy(isBusy) {
+        for (const button of exportButtons) {
+          button.toggleAttribute('disabled', isBusy);
+        }
+        if (isBusy) {
+          errorElement?.setAttribute('hidden', 'true');
+        }
+      }
+
+      async function handleExport(format) {
+        if (!window.__babelMdViewerExport?.captureElement) {
+          errorElement?.removeAttribute('hidden');
+          if (errorElement) {
+            errorElement.textContent = defaultError;
+          }
+          return;
+        }
+
+        try {
+          setBusy(true);
+          if (errorElement) {
+            errorElement.textContent = busyLabel;
+            errorElement.removeAttribute('hidden');
+          }
+          const result = await window.__babelMdViewerExport.captureElement(exportContainer);
+          vscode.postMessage({
+            type: 'exportContent',
+            payload: {
+              format,
+              dataUrl: result.dataUrl,
+              width: result.width,
+              height: result.height,
+            },
+          });
+          if (errorElement) {
+            errorElement.setAttribute('hidden', 'true');
+          }
+        } catch (error) {
+          console.error('Export failed', error);
+          if (errorElement) {
+            errorElement.textContent = defaultError;
+            errorElement.removeAttribute('hidden');
+          }
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      for (const button of exportButtons) {
+        button.addEventListener('click', () => {
+          const format = button.getAttribute('data-export-format');
+          if (format === 'png' || format === 'pdf') {
+            void handleExport(format);
+          }
+        });
+      }
+    })();
+  </script>
 </body>
 </html>`;
   }
@@ -186,6 +342,17 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
     return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
+  private createNonce(): string {
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    const length = 16;
+    let result = '';
+    for (let i = 0; i < length; i += 1) {
+      const index = Math.floor(Math.random() * possible.length);
+      result += possible.charAt(index);
+    }
+    return result;
+  }
+
   private listenToDocument(document: vscode.TextDocument): void {
     this.documentSubscription?.dispose();
 
@@ -196,6 +363,41 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
 
       await this.render(event.document);
     });
+  }
+
+  private async handleWebviewMessage(message: MarkdownPreviewMessage): Promise<void> {
+    if (message.type !== 'exportContent') {
+      this.logger.warn(`Unhandled message from Markdown preview: ${(message as { type: string }).type}`);
+      return;
+    }
+
+    await this.exportService.export({
+      format: message.payload.format,
+      dataUri: message.payload.dataUrl,
+      width: message.payload.width,
+      height: message.payload.height,
+      documentUri: this.currentDocumentUri,
+      fileNameHint: this.buildFileNameHint(),
+    });
+  }
+
+  private buildFileNameHint(): string {
+    if (!this.currentDocumentUri) {
+      return 'markdown-preview';
+    }
+
+    const baseName =
+      this.currentDocumentUri.scheme === 'file'
+        ? basename(this.currentDocumentUri.fsPath)
+        : basename(this.currentDocumentUri.path);
+
+    if (!baseName) {
+      return 'markdown-preview';
+    }
+
+    const index = baseName.lastIndexOf('.');
+    const stripped = index >= 0 ? baseName.slice(0, index) : baseName;
+    return `${stripped}-preview`;
   }
 
   private handlePanelDispose(): void {
