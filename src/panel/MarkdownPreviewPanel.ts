@@ -135,7 +135,7 @@ export class MarkdownPreviewPanel implements vscode.Disposable {
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'exportBridge.js'),
     );
     const nonce = this.createNonce();
-    const csp = `default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource};`;
+    const csp = `default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource}; connect-src ${webview.cspSource} https: data:;`;
 
     return `<!DOCTYPE html>
 <html lang="${this.escapeHtml(languageTag)}">

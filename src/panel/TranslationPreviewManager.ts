@@ -495,7 +495,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
       vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'exportBridge.js'),
     );
     const nonce = this.createNonce();
-    const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
+    const csp = `default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; connect-src ${webview.cspSource} https: data:;`;
     const localeBundle = getWebviewLocaleBundle();
     const localeJson = JSON.stringify(localeBundle).replace(/</g, '\\u003c');
     const escapeHtml = (value: string): string =>
