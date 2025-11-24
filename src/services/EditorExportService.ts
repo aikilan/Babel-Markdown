@@ -127,11 +127,6 @@ export class EditorExportService {
     );
     const nonce = this.createNonce();
     const csp = `default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; font-src ${webview.cspSource}; connect-src ${webview.cspSource} https: data:;`;
-    const documentLabel =
-      document.uri.scheme === 'file'
-        ? vscode.workspace.asRelativePath(document.uri)
-        : document.uri.path;
-
     const sharedStyles = buildPreviewStyles({
       theme: result.theme,
       background,
@@ -156,10 +151,6 @@ export class EditorExportService {
 </head>
 <body>
   <main id="capture-root">
-    <header>
-      <strong>${this.escapeHtml(localize('preview.markdownPanelTitle', { document: documentLabel }))}</strong>
-      <span>${this.escapeHtml(documentLabel)}</span>
-    </header>
     <section id="preview-root">
       ${result.html}
     </section>
