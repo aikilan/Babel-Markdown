@@ -6,6 +6,8 @@
   "command.openTranslationPreview.title": "Babel Markdown: Open Translation Preview",
   "command.refreshTranslationPreview.title": "Babel Markdown: Refresh Translation Preview",
   "command.configureTranslationApiKey.title": "Babel Markdown: Set Translation API Key",
+  "command.exportMarkdownAsImage.title": "Babel Markdown: Export Markdown as PNG",
+  "command.exportMarkdownAsPdf.title": "Babel Markdown: Export Markdown as PDF",
   "command.category": "Babel Markdown",
   "configuration.title": "Babel Markdown",
   "config.previewTheme.description": "Select the theme for the preview webview.",

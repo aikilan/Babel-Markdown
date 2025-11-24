@@ -6,6 +6,7 @@ import { createConfigureTranslationApiKeyCommand } from '../commands/configureTr
 import { createOpenTranslationPreviewCommand } from '../commands/openTranslationPreview';
 import { createRefreshTranslationPreviewCommand } from '../commands/refreshTranslationPreview';
 import { MarkdownPreviewPanel } from '../panel/MarkdownPreviewPanel';
+import { createExportMarkdownCommand } from '../commands/exportMarkdown';
 import { TranslationPreviewManager } from '../panel/TranslationPreviewManager';
 import { BabelMarkdownService } from '../services/BabelMarkdownService';
 import { SecretStorageService } from '../services/SecretStorageService';
@@ -14,11 +15,13 @@ import { TranslationService } from '../services/TranslationService';
 import { PromptResolver } from '../services/PromptResolver';
 import { ExtensionLogger } from '../utils/logger';
 import { MarkdownExportService } from '../services/MarkdownExportService';
+import { EditorExportService } from '../services/EditorExportService';
 
 export function registerCommands(context: vscode.ExtensionContext): vscode.Disposable[] {
   const logger = new ExtensionLogger();
   const service = new BabelMarkdownService(logger);
   const exportService = new MarkdownExportService(logger);
+  const editorExportService = new EditorExportService(context.extensionUri, exportService, logger);
   const previewPanel = new MarkdownPreviewPanel(
     context.extensionUri,
     service,
@@ -63,6 +66,14 @@ export function registerCommands(context: vscode.ExtensionContext): vscode.Dispo
     vscode.commands.registerCommand(
       'babelMdViewer.configureTranslationApiKey',
       createConfigureTranslationApiKeyCommand(secretStorageService, logger),
+    ),
+    vscode.commands.registerCommand(
+      'babelMdViewer.exportMarkdownAsImage',
+      createExportMarkdownCommand(editorExportService, logger, 'png'),
+    ),
+    vscode.commands.registerCommand(
+      'babelMdViewer.exportMarkdownAsPdf',
+      createExportMarkdownCommand(editorExportService, logger, 'pdf'),
     ),
   ];
 }

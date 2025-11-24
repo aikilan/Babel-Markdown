@@ -9,6 +9,7 @@ export interface TransformationResult {
   html: string;
   theme: 'light' | 'dark';
   contentHash: string;
+  sourceMarkdown: string;
 }
 
 export class BabelMarkdownService {
@@ -31,6 +32,7 @@ export class BabelMarkdownService {
       html: transformedHtml,
       theme,
       contentHash: hash,
+      sourceMarkdown: markdownContent,
     };
   }
 

@@ -24,7 +24,9 @@
     "onCommand:babelMdViewer.refreshPreview",
     "onCommand:babelMdViewer.openTranslationPreview",
     "onCommand:babelMdViewer.refreshTranslationPreview",
-    "onCommand:babelMdViewer.configureTranslationApiKey"
+    "onCommand:babelMdViewer.configureTranslationApiKey",
+    "onCommand:babelMdViewer.exportMarkdownAsImage",
+    "onCommand:babelMdViewer.exportMarkdownAsPdf"
   ],
   "contributes": {
     "commands": [
@@ -54,6 +56,16 @@
         "command": "babelMdViewer.configureTranslationApiKey",
         "title": "%command.configureTranslationApiKey.title%",
         "category": "%command.category%"
+      },
+      {
+        "command": "babelMdViewer.exportMarkdownAsImage",
+        "title": "%command.exportMarkdownAsImage.title%",
+        "category": "%command.category%"
+      },
+      {
+        "command": "babelMdViewer.exportMarkdownAsPdf",
+        "title": "%command.exportMarkdownAsPdf.title%",
+        "category": "%command.category%"
       }
     ],
     "menus": {
@@ -61,6 +73,16 @@
         {
           "command": "babelMdViewer.openTranslationPreview",
           "group": "navigation@2",
+          "when": "resourceLangId == markdown"
+        },
+        {
+          "command": "babelMdViewer.exportMarkdownAsImage",
+          "group": "navigation@3",
+          "when": "resourceLangId == markdown"
+        },
+        {
+          "command": "babelMdViewer.exportMarkdownAsPdf",
+          "group": "navigation@4",
           "when": "resourceLangId == markdown"
         }
       ],

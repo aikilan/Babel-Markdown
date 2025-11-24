@@ -158,6 +158,23 @@ const retryButton = retryElement;
 const exportButtons = exportButtonElements;
 const exportErrorArea = exportErrorElement instanceof HTMLElement ? exportErrorElement : undefined;
 
+function logExport(message: string, details?: unknown): void {
+  const payload = { message, details };
+  try {
+    // eslint-disable-next-line no-console
+    console.log('[BabelMarkdown][translation][export]', payload);
+  } catch {
+    // ignore console issues
+  }
+  postMessage({
+    type: 'log',
+    payload: {
+      level: 'info',
+      message: `[Translation Preview] ${message} ${JSON.stringify(details ?? {})}`,
+    },
+  });
+}
+
 retryButton.textContent = locale.retryButtonLabel;
 outputContainer.setAttribute('aria-label', locale.ariaContentLabel);
 disableExportButtons(false);
@@ -298,7 +315,9 @@ async function requestExport(format: 'png' | 'pdf'): Promise<void> {
   setExportMessage(true, locale.exportControls.inProgressMessage);
 
   try {
+    logExport('Starting translation export', { format, content: 'preview' });
     const result = await window.__babelMdViewerExport.captureElement(outputContainer);
+    logExport('Translation export captured', { width: result.width, height: result.height });
     postMessage({
       type: 'exportContent',
       payload: {
@@ -306,6 +325,7 @@ async function requestExport(format: 'png' | 'pdf'): Promise<void> {
         dataUrl: result.dataUrl,
         width: result.width,
         height: result.height,
+        content: 'preview',
       },
     });
     setExportMessage(false);

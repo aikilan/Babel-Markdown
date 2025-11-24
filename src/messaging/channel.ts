@@ -91,6 +91,7 @@ export type WebviewToHostMessage =
         dataUrl: string;
         width: number;
         height: number;
+        content: 'preview';
       };
     }
   | {

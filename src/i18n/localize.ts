@@ -175,6 +175,18 @@ const translations = {
     en: 'Export as PDF',
     'zh-cn': '导出为 PDF',
   },
+  'preview.exportTargetLabel': {
+    en: 'Content',
+    'zh-cn': '内容',
+  },
+  'preview.exportTarget.preview': {
+    en: 'Preview Markdown',
+    'zh-cn': '预览 Markdown',
+  },
+  'preview.exportTarget.source': {
+    en: 'Original Markdown',
+    'zh-cn': '原始 Markdown',
+  },
   'preview.exportError': {
     en: 'Unable to prepare the preview for export.',
     'zh-cn': '无法准备预览导出。',
@@ -214,6 +226,14 @@ const translations = {
   'export.failure.generic': {
     en: 'Failed to export preview. Check logs for details.',
     'zh-cn': '导出预览失败。请查看日志了解详情。',
+  },
+  'export.progress.capturing': {
+    en: 'Capturing Markdown for export…',
+    'zh-cn': '正在捕获 Markdown 以导出…',
+  },
+  'export.worker.title': {
+    en: 'Markdown Export',
+    'zh-cn': 'Markdown 导出',
   },
   'webview.statusInProgress': {
     en: 'Translating {document} → {language}{progress}…',
