@@ -501,8 +501,8 @@ export class TranslationPreviewManager implements vscode.Disposable {
     const escapeHtml = (value: string): string =>
       value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const escapeAttribute = (value: string): string => escapeHtml(value).replace(/"/g, '&quot;');
-    const imageIcon = `<svg class="preview__exportIconSvg" viewBox="0 0 24 24" role="presentation" focusable="false"><path fill="currentColor" d="M4 6h16a2 2 0 0 1 2 2v10.5A1.5 1.5 0 0 1 20.5 20h-17A1.5 1.5 0 0 1 2 18.5V8a2 2 0 0 1 2-2Zm0 2v10h16V8zm3.5 1.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3Zm11 7.25-3.25-4.24-2.54 3.39-1.71-2.06L7.5 17.75z"/></svg>`;
-    const pdfIcon = `<svg class="preview__exportIconSvg" viewBox="0 0 24 24" role="presentation" focusable="false"><path fill="currentColor" d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm8 2H6v18h12V8h-4zm-2.5 6H13c1.38 0 2.5 1.12 2.5 2.5S14.38 15 13 15h-.5v3H11.5V10Zm1.5 1.5H11.5v2h1.5a1 1 0 0 0 0-2Z"/></svg>`;
+    const imageIcon = `<svg class="preview__exportIconSvg" viewBox="0 0 24 24" role="presentation" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M4 6.5h16a1.5 1.5 0 0 1 1.5 1.5v9.5A1.5 1.5 0 0 1 20.5 19H3.5A1.5 1.5 0 0 1 2 17.5V8a1.5 1.5 0 0 1 1.5-1.5Zm3 4 2 2.5 2.5-3.5 3.5 5h-11Zm0-2.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Z"/></svg>`;
+    const pdfIcon = `<svg class="preview__exportIconSvg" viewBox="0 0 24 24" role="presentation" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M8 4h5l4 4v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm5 0v4h4m-8.5 4.25h2.1c.9 0 1.4.62 1.4 1.38 0 .77-.5 1.37-1.4 1.37h-1.1v2h-1v-4.75Zm5 0h1.3c.92 0 1.7.67 1.7 1.75 0 1.05-.78 1.75-1.7 1.75h-.3v1.5h-1v-5Zm-4 1v1.37h.95c.28 0 .55-.2.55-.68 0-.44-.24-.7-.55-.7Z"/></svg>`;
 
   return `<!DOCTYPE html>
 <html lang="${escapeAttribute(localeBundle.languageTag)}">
@@ -600,19 +600,20 @@ export class TranslationPreviewManager implements vscode.Disposable {
     .preview__exportButton {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      font-size: 0.85rem;
+      gap: 5px;
+      padding: 5px 10px;
+      font-size: 0.82rem;
       border-radius: 4px;
-      border: 1px solid var(--vscode-button-border, transparent);
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
+      border: 1px solid var(--vscode-button-border, rgba(128, 128, 128, 0.35));
+      background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+      color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
       cursor: pointer;
-      transition: background 150ms ease;
+      transition: background 150ms ease, border-color 150ms ease;
     }
 
     .preview__exportButton:hover:not([disabled]) {
-      background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+      background: var(--vscode-button-hoverBackground, rgba(128, 128, 128, 0.1));
+      border-color: var(--vscode-focusBorder, var(--vscode-button-border, rgba(128, 128, 128, 0.35)));
     }
 
     .preview__exportButton[disabled] {
@@ -621,8 +622,8 @@ export class TranslationPreviewManager implements vscode.Disposable {
     }
 
     .preview__exportIconSvg {
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       display: inline-block;
     }
 
