@@ -3,7 +3,7 @@
   "displayName": "%extension.displayName%",
   "description": "%extension.description%",
   "publisher": "BabelMarkdown",
-  "author": "aikilan",
+  "author": "xukechu",
   "version": "1.2.0",
   "license": "MIT",
   "icon": "assets/icons/logo.png",
