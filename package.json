@@ -218,10 +218,6 @@
     "vite": "^7.2.0"
   },
   "dependencies": {
-    "@fastify/cors": "^10.0.2",
-    "@fastify/swagger": "^9.4.1",
-    "@fastify/swagger-ui": "^5.2.0",
-    "fastify": "^4.27.2",
     "html-to-image": "^1.11.13",
     "markdown-it": "^14.1.0",
     "pdf-lib": "^1.17.1",
