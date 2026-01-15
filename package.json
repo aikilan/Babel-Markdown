@@ -4,12 +4,12 @@
   "description": "%extension.description%",
   "publisher": "BabelMarkdown",
   "author": "aikilan",
-  "version": "1.2.4",
+  "version": "1.2.5",
   "license": "MIT",
   "icon": "assets/icons/logo.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/xukechu/Babel-Markdown"
+    "url": "https://github.com/aikilan/Babel-Markdown"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -189,8 +189,8 @@
     "build:webview": "vite build --config vite.config.webview.mjs && vite build --config vite.config.exportBridge.mjs",
     "build": "pnpm run typecheck && pnpm run build:extension && pnpm run build:webview",
     "compile": "pnpm run build",
-    "package": "pnpm run build && pnpm exec vsce package --no-dependencies",
-    "vsc:publish": "pnpm run package && pnpm exec vsce publish --no-dependencies",
+    "vsc:package": "pnpm run build && pnpm exec vsce package --no-dependencies",
+    "vsc:publish": "pnpm run vsc:package && pnpm exec vsce publish --no-dependencies",
     "compile-tests": "tsc -p tsconfig.test.json",
     "watch": "tsc -watch -p tsconfig.json",
     "watch-tests": "tsc -watch -p tsconfig.test.json",

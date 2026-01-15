@@ -16,6 +16,7 @@ import { PromptResolver } from '../services/PromptResolver';
 import { ExtensionLogger } from '../utils/logger';
 import { MarkdownExportService } from '../services/MarkdownExportService';
 import { EditorExportService } from '../services/EditorExportService';
+import { TranslationCacheStore } from '../services/TranslationCacheStore';
 
 export function registerCommands(context: vscode.ExtensionContext): vscode.Disposable[] {
   const logger = new ExtensionLogger();
@@ -37,10 +38,12 @@ export function registerCommands(context: vscode.ExtensionContext): vscode.Dispo
   const openAIClient = new OpenAITranslationClient(logger);
   const translationService = new TranslationService(logger, openAIClient);
   const promptResolver = new PromptResolver(logger);
+  const cacheStore = new TranslationCacheStore(context.globalStorageUri, logger);
   const translationPreviewManager = new TranslationPreviewManager(
     context.extensionUri,
     translationService,
     promptResolver,
+    cacheStore,
     exportService,
     logger,
   );

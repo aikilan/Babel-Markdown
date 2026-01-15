@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 export function hashObject(value: unknown): string {
   const json = JSON.stringify(value, Object.keys(value as object).sort());
   let hash = 0;
@@ -9,4 +11,8 @@ export function hashObject(value: unknown): string {
   }
 
   return hash.toString(16);
+}
+
+export function sha256Hex(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }

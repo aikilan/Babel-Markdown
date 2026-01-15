@@ -5,6 +5,7 @@ import type { ExtensionConfiguration } from '../types/config';
 import type { ResolvedTranslationConfiguration } from '../types/translation';
 import { TranslationService, TranslationSegmentUpdate } from '../services/TranslationService';
 import { TranslationCache } from '../services/TranslationCache';
+import { TranslationCacheStore } from '../services/TranslationCacheStore';
 import { PromptResolver } from '../services/PromptResolver';
 import type { HostToWebviewMessage, WebviewToHostMessage } from '../messaging/channel';
 import { getWebviewLocaleBundle, localize } from '../i18n/localize';
@@ -43,12 +44,13 @@ export class TranslationPreviewManager implements vscode.Disposable {
   private readonly previews = new Map<string, PreviewEntry>();
   private readonly disposables: vscode.Disposable[] = [];
   private readonly abortControllers = new Map<string, AbortController>();
-  private readonly cache = new TranslationCache();
+  private readonly segmentCache = new TranslationCache();
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly translationService: TranslationService,
     private readonly promptResolver: PromptResolver,
+    private readonly cacheStore: TranslationCacheStore,
     private readonly exportService: MarkdownExportService,
     private readonly logger: ExtensionLogger,
   ) {
@@ -64,7 +66,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
           this.logger.info(`Closing translation preview for ${key} (source document closed).`);
           preview.panel.dispose();
         }
-        this.cache.clearForDocument(document);
+        this.segmentCache.clearForDocument(document);
       }),
     );
   }
@@ -228,10 +230,19 @@ export class TranslationPreviewManager implements vscode.Disposable {
     preview.lastVersion = context.document.version;
 
     if (options?.invalidateCache) {
-      this.cache.clearForDocument(context.document);
+      this.segmentCache.clearForDocument(context.document);
+      await this.cacheStore.clearForDocument(context.document);
     }
 
-    const cached = this.cache.get(context.document, context.resolvedConfig, prompt.fingerprint);
+    const documentText = context.document.getText();
+    const cached = options?.invalidateCache
+      ? undefined
+      : await this.cacheStore.load(
+          context.document,
+          documentText,
+          context.resolvedConfig,
+          prompt,
+        );
 
     if (cached) {
       this.logger.info(`Serving translation for ${key} from cache.`);
@@ -241,6 +252,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
         latencyMs: cached.latencyMs,
         wasCached: true,
       });
+      panel.title = this.buildTitle(context.document);
       this.postMessage(panel, {
         type: 'translationResult',
         payload: {
@@ -339,7 +351,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
           configuration: context.configuration,
           resolvedConfig: context.resolvedConfig,
           signal: controller.signal,
-          cache: this.cache,
+          cache: this.segmentCache,
           prompt,
         },
         { onPlan, onSegment },
@@ -351,7 +363,6 @@ export class TranslationPreviewManager implements vscode.Disposable {
 
       panel.title = this.buildTitle(context.document);
       const recoveries = result.recoveries ?? [];
-      const shouldPersistDocumentCache = recoveries.length === 0;
 
       if (recoveries.length > 0) {
         this.logger.event('translation.recoverySummary', {
@@ -376,13 +387,7 @@ export class TranslationPreviewManager implements vscode.Disposable {
           recoveries,
         },
       });
-      if (shouldPersistDocumentCache) {
-        this.cache.set(context.document, context.resolvedConfig, prompt.fingerprint, result);
-      } else {
-        this.logger.info(
-          `Skipped document-level cache for ${documentPath} due to segment recoveries.`,
-        );
-      }
+      await this.cacheStore.save(context.document, documentText, context.resolvedConfig, prompt, result);
       this.logger.event('translation.success', {
         ...requestMeta,
         providerId: result.providerId,
