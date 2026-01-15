@@ -65,22 +65,9 @@ export type HostToWebviewMessage =
         wasCached: boolean;
         recovery?: SerializedSegmentRecovery;
       };
-    }
-  | {
-      type: 'scrollSync';
-      payload: {
-        line: number;
-        totalLines: number;
-      };
     };
 
 export type WebviewToHostMessage =
-  | {
-      type: 'requestScrollSync';
-      payload: {
-        fraction: number;
-      };
-    }
   | {
       type: 'requestRetry';
     }

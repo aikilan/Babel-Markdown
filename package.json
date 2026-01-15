@@ -4,7 +4,7 @@
   "description": "%extension.description%",
   "publisher": "BabelMarkdown",
   "author": "aikilan",
-  "version": "1.2.0",
+  "version": "1.2.4",
   "license": "MIT",
   "icon": "assets/icons/logo.png",
   "repository": {
@@ -169,7 +169,7 @@
         },
         "babelMdViewer.translation.promptTemplate": {
           "type": "string",
-          "default": "You are an expert technical translator. Translate Markdown documents into {{targetLanguage}} while preserving the original Markdown structure, code blocks, inline formatting, tables, and metadata. Do not add commentary.",
+          "default": "You are a professional {{targetLanguage}} native translator specialized in academic content who needs to fluently translate text into {{targetLanguage}}. ## Translation Rules 1. Output only the translated content, without explanations or additional content 2. Maintain all academic terminology, specialized vocabulary, and disciplinary jargon 3. If the text contains HTML tags, consider where the tags should be placed in the translation while maintaining fluency 4. Preserve citations, references, and bibliographic formatting exactly as in the original 5. Keep the formal academic tone, voice, and level of complexity 6. Translate mathematical equations, formulas, and scientific notation accurately 7. Ensure consistent translation of recurring technical terms throughout the document 8. If the input is entirely in {{targetLanguage}}, return it unchanged without paraphrasing or normalization 9. If the input is mixed-language, translate only the parts not already in {{targetLanguage}} and keep existing {{targetLanguage}} text exactly as-is 10. Do not translate language labels or navigation text such as \"English\", \"中文\", or \"English | 中文\"; keep them exactly as-is.",
           "markdownDescription": "%config.translation.promptTemplate.markdownDescription%"
         },
         "babelMdViewer.translation.retry.maxAttempts": {
@@ -196,7 +196,9 @@
     "watch-tests": "tsc -watch -p tsconfig.test.json",
     "lint": "eslint ./src ./test --ext .ts",
     "test": "npm run compile && npm run compile-tests && node ./dist-test/test/runTest.js",
-    "check": "npm run lint && npm run test"
+    "check": "npm run lint && npm run test",
+    "jb:setup": "bash jb/scripts/setup-env.sh",
+    "jb:build": "bash jb/scripts/build-plugin.sh"
   },
   "devDependencies": {
     "@types/markdown-it": "^14.1.2",

@@ -16,7 +16,6 @@ interface PreviewEntry {
   disposable: vscode.Disposable;
   lastVersion: number;
   context: RenderContext;
-  rangeSubscription?: vscode.Disposable;
 }
 
 interface RenderContext {
@@ -79,7 +78,6 @@ export class TranslationPreviewManager implements vscode.Disposable {
     for (const preview of this.previews.values()) {
       preview.panel.dispose();
       preview.disposable.dispose();
-      preview.rangeSubscription?.dispose();
     }
     this.previews.clear();
 
@@ -96,8 +94,6 @@ export class TranslationPreviewManager implements vscode.Disposable {
     if (existing) {
       existing.context = context;
       existing.panel.reveal(undefined, true);
-      this.registerScrollListener(key);
-      this.postVisibleRange(existing.panel, context.document);
       await this.render(existing.panel, context);
       return;
     }
@@ -128,9 +124,6 @@ export class TranslationPreviewManager implements vscode.Disposable {
         case 'log':
           this.logger.info(`[Webview] ${message.payload.level}: ${message.payload.message}`);
           break;
-        case 'requestScrollSync':
-          this.handleScrollRequest(previewEntry.context.document, message.payload.fraction);
-          break;
         case 'requestRetry':
           void this.render(previewEntry.panel, previewEntry.context, { force: true, invalidateCache: true });
           break;
@@ -152,7 +145,6 @@ export class TranslationPreviewManager implements vscode.Disposable {
           targetLanguage: entry.context.resolvedConfig.targetLanguage,
         });
       }
-      entry?.rangeSubscription?.dispose();
       this.previews.delete(key);
       disposable.dispose();
     });
@@ -165,9 +157,6 @@ export class TranslationPreviewManager implements vscode.Disposable {
     };
 
     this.previews.set(key, entry);
-    this.registerScrollListener(key);
-    this.postVisibleRange(panel, context.document);
-
     await this.render(panel, context, { force: true });
   }
 
@@ -788,62 +777,6 @@ export class TranslationPreviewManager implements vscode.Disposable {
     return `${stripped}-${language}-translation-preview`;
   }
 
-  private registerScrollListener(key: string): void {
-    const preview = this.previews.get(key);
-
-    preview?.rangeSubscription?.dispose();
-
-    if (!preview) {
-      return;
-    }
-
-    const { document } = preview.context;
-
-    const subscription = vscode.window.onDidChangeTextEditorVisibleRanges((event) => {
-      if (event.textEditor.document !== document) {
-        return;
-      }
-
-      const visibleRange = event.visibleRanges[0];
-
-      if (!visibleRange) {
-        return;
-      }
-
-      this.postMessage(preview.panel, {
-        type: 'scrollSync',
-        payload: {
-          line: visibleRange.start.line,
-          totalLines: document.lineCount,
-        },
-      });
-    });
-
-    preview.rangeSubscription = subscription;
-  }
-
-  private postVisibleRange(panel: vscode.WebviewPanel, document: vscode.TextDocument): void {
-    const editor = vscode.window.visibleTextEditors.find((candidate) => candidate.document === document);
-
-    if (!editor) {
-      return;
-    }
-
-    const visibleRange = editor.visibleRanges[0];
-
-    if (!visibleRange) {
-      return;
-    }
-
-    this.postMessage(panel, {
-      type: 'scrollSync',
-      payload: {
-        line: visibleRange.start.line,
-        totalLines: document.lineCount,
-      },
-    });
-  }
-
   private interpretError(
     message: string,
     info: { documentPath: string; targetLanguage: string },
@@ -926,20 +859,6 @@ export class TranslationPreviewManager implements vscode.Disposable {
       hint,
       notification: formatNotification(hint),
     };
-  }
-
-  private handleScrollRequest(document: vscode.TextDocument, fraction: number): void {
-    const editor = vscode.window.visibleTextEditors.find((candidate) => candidate.document === document);
-
-    if (!editor) {
-      return;
-    }
-
-    const lastLine = Math.max(editor.document.lineCount - 1, 0);
-    const targetLine = Math.min(Math.floor(lastLine * fraction), lastLine);
-    const position = new vscode.Position(targetLine, 0);
-    const range = new vscode.Range(position, position);
-    editor.revealRange(range, vscode.TextEditorRevealType.AtTop);
   }
 
   private cancelPendingTranslation(

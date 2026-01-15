@@ -79,6 +79,15 @@ export class OpenAITranslationClient {
       markdown: documentText,
       fileName,
     });
+    const payload = {
+      model: resolvedConfig.model,
+      messages,
+      temperature: 0.2,
+      top_p: 1,
+      response_format: { type: 'text' },
+    };
+    const payloadJson = JSON.stringify(payload);
+    this.logger.info(`Translation request payload: ${payloadJson}`);
 
     const controller = new AbortController();
     let timeoutId: NodeJS.Timeout | undefined;
@@ -109,13 +118,7 @@ export class OpenAITranslationClient {
           Authorization: `Bearer ${resolvedConfig.apiKey}`,
           'api-key': resolvedConfig.apiKey,
         },
-        body: JSON.stringify({
-          model: resolvedConfig.model,
-          messages,
-          temperature: 0.2,
-          top_p: 1,
-          response_format: { type: 'text' },
-        }),
+        body: payloadJson,
         signal: controller.signal,
       });
 

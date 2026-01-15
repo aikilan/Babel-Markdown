@@ -6,10 +6,12 @@ dist-test/**
 .idea/**
 docs/**
 scripts/**
+jb/**
 *.vsix
 pnpm-lock.yaml
 pnpm-workspace.yaml
 node_modules/**
 tmp_vsix/**
-
+.env
+**/.env
 !dist/**

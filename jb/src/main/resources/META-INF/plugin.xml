@@ -1,0 +1,43 @@
+<idea-plugin>
+  <id>com.babelmarkdown.aikilan</id>
+  <name>BabelMarkdown</name>
+  <vendor email="aikilan.ft@gamil.com">aikilan</vendor>
+  <description><![CDATA[
+    BabelMarkdown provides an AI translation preview for Markdown files with synchronized scrolling.
+  ]]></description>
+  <depends>com.intellij.modules.platform</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <applicationConfigurable
+      id="BabelMarkdown.Settings"
+      displayName="BabelMarkdown"
+      instance="com.babelmarkdown.aikilan.settings.BabelMarkdownSettingsConfigurable" />
+    <toolWindow
+      id="BabelMarkdown Preview"
+      anchor="right"
+      factoryClass="com.babelmarkdown.aikilan.ui.TranslationPreviewToolWindowFactory"
+      icon="/icons/logo.png" />
+    <notificationGroup id="BabelMarkdown" displayType="BALLOON" />
+  </extensions>
+
+  <actions>
+    <action
+      id="BabelMarkdown.OpenTranslationPreview"
+      class="com.babelmarkdown.aikilan.actions.OpenTranslationPreviewAction"
+      text="BabelMarkdown: Open Translation Preview"
+      description="Open translation preview for the current Markdown file"
+      icon="/icons/logo.png">
+      <add-to-group group-id="EditorPopupMenu" anchor="last" />
+      <add-to-group group-id="ToolsMenu" anchor="last" />
+    </action>
+    <action
+      id="BabelMarkdown.RefreshTranslationPreview"
+      class="com.babelmarkdown.aikilan.actions.RefreshTranslationPreviewAction"
+      text="BabelMarkdown: Refresh Translation Preview"
+      description="Refresh translation preview for the current Markdown file"
+      icon="/icons/logo.png">
+      <add-to-group group-id="EditorPopupMenu" anchor="last" />
+      <add-to-group group-id="ToolsMenu" anchor="last" />
+    </action>
+  </actions>
+</idea-plugin>
