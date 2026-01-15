@@ -3,7 +3,73 @@
   <name>BabelMarkdown</name>
   <vendor email="aikilan.ft@gamil.com">aikilan</vendor>
   <description><![CDATA[
-    BabelMarkdown provides an AI translation preview for Markdown files with synchronized scrolling.
+<h1 id="babel-markdown">Babel Markdown</h1>
+<p><img src="https://raw.githubusercontent.com/xukechu/Babel-Markdown/refs/heads/main/assets/images/Snipaste_2025-11-06_18-16-02.png" alt="Babel Markdown preview"></p>
+<p><a href="#english">English</a> · <a href="#%E4%B8%AD%E6%96%87">中文</a> · <a href="LICENSE">License</a></p>
+<h2 id="english">English</h2>
+<p>Babel Markdown brings real-time AI translation previews to 您的 IDEA so you can compare source Markdown with translated output in a single workspace.</p>
+<h3 id="highlights">Highlights</h3>
+<ul>
+<li><strong>Progressive translation preview</strong>: streams segments as they finish translating.</li>
+<li><strong>Markdown fidelity</strong>: preserves headings, lists, tables, and code blocks exactly.</li>
+<li><strong>One-click exports</strong>: right-click any Markdown to export the rendered preview as PNG or PDF; translation preview panel also supports direct export.</li>
+<li><strong>Adaptive batching &amp; parallelism</strong>: merges short sections and balances concurrency for responsive yet stable runs.</li>
+<li><strong>Caching &amp; recovery</strong>: reuses previous translations and falls back to cached or placeholder content when errors occur.</li>
+<li><strong>OpenAI-compatible API support</strong>: customize base URL, model, language, and timeout for any compatible provider.</li>
+</ul>
+<h3 id="how-to-use">How to Use</h3>
+<ol>
+<li>Open 您的 IDEA settings, search for “Babel Markdown,” and configure the translation API base URL, API key, and target language.</li>
+<li>Open a Markdown file, then run “Babel Markdown: Open Translation Preview” from the editor toolbar, context menu, or command palette.</li>
+<li>Monitor translation progress and warnings inside the preview panel; refresh or retry whenever you need to.</li>
+</ol>
+<h3 id="key-settings">Key Settings</h3>
+<ul>
+<li><code>translation.apiBaseUrl</code> – OpenAI-compatible endpoint.</li>
+<li><code>translation.apiKey</code> – secure token for translation requests.</li>
+<li><code>translation.model</code> – e.g., <code>gpt-4o-mini</code>.</li>
+<li><code>translation.targetLanguage</code> – output language code.</li>
+<li>Advanced knobs such as <code>translation.timeoutMs</code>, <code>translation.concurrencyLimit</code>, and <code>translation.retry.maxAttempts</code> keep performance and resilience under control.</li>
+</ul>
+<h3 id="best-for">Best For</h3>
+<ul>
+<li>Localization and bilingual documentation review.</li>
+<li>Fast QA of Markdown READMEs, release notes, or tutorials.</li>
+<li>Collaboration scenarios where teams need synchronized multilingual content.</li>
+</ul>
+<p><img src="https://raw.githubusercontent.com/xukechu/Babel-Markdown/refs/heads/main/assets/images/Snipaste_2025-11-06_16-51-04.png" alt="Babel Markdown secondary preview"></p>
+<h2 id="中文">中文</h2>
+<p>Babel Markdown 为 您的 IDEA 提供实时翻译预览能力，让原文 Markdown 与 AI 翻译后的内容在同一视图中同步呈现，帮助你高效校对多语言文档。</p>
+<h3 id="主要特性">主要特性</h3>
+<ul>
+<li><strong>渐进式翻译预览</strong>：按段落流式更新翻译结果，阅读无需等待整篇完成。</li>
+<li><strong>Markdown 结构保真</strong>：保留标题、列表、代码块、表格等格式，翻译内容可直接复制使用。</li>
+<li><strong>一键导出</strong>：右键 Markdown 即可将预览效果导出为 PNG/PDF，翻译预览面板同样支持直接导出。</li>
+<li><strong>自适应分段与并行处理</strong>：自动合并短段落并控制并发度，平衡速度与稳定性。</li>
+<li><strong>缓存与错误恢复</strong>：复用历史片段并在异常时回退缓存或原文，确保预览不中断。</li>
+<li><strong>面向 OpenAI 兼容 API</strong>：自定义 Base URL、模型、语言与超时，兼容第三方服务。</li>
+</ul>
+<h3 id="使用流程">使用流程</h3>
+<ol>
+<li>在设置中搜索 “Babel Markdown”，配置翻译 API 基础地址、密钥与目标语言。</li>
+<li>打开 Markdown 文档，使用编辑器标题栏按钮、右键菜单或命令面板运行 “Babel Markdown: Open Translation Preview”。</li>
+<li>预览面板将显示翻译进度、警告提示与最终结果，可随时刷新或重试。</li>
+</ol>
+<h3 id="可配置项">可配置项</h3>
+<ul>
+<li><code>translation.apiBaseUrl</code>：OpenAI 兼容接口地址。</li>
+<li><code>translation.apiKey</code>：翻译请求使用的安全密钥。</li>
+<li><code>translation.model</code>：模型名称，例如 <code>gpt-4o-mini</code>。</li>
+<li><code>translation.targetLanguage</code>：目标语言代码。</li>
+<li><code>translation.timeoutMs</code>、<code>translation.concurrencyLimit</code>、<code>retry.maxAttempts</code> 等高级参数。</li>
+</ul>
+<h3 id="适用场景">适用场景</h3>
+<ul>
+<li>本地化、双语技术文档校对。</li>
+<li>快速审阅 Markdown 说明、变更日志或 README。</li>
+<li>团队协作中需要多语言同步的开发场景。</li>
+</ul>
+<p>立即在 您的 IDEA 中体验 Babel Markdown，感受智能翻译带来的写作提效！</p>
   ]]></description>
   <depends>com.intellij.modules.platform</depends>
 
@@ -24,18 +90,16 @@
     <action
       id="BabelMarkdown.OpenTranslationPreview"
       class="com.babelmarkdown.aikilan.actions.OpenTranslationPreviewAction"
-      text="BabelMarkdown: Open Translation Preview"
-      description="Open translation preview for the current Markdown file"
-      icon="/icons/logo.png">
+      text="Open Translation"
+      description="Open translation preview for the current Markdown file">
       <add-to-group group-id="EditorPopupMenu" anchor="last" />
       <add-to-group group-id="ToolsMenu" anchor="last" />
     </action>
     <action
       id="BabelMarkdown.RefreshTranslationPreview"
       class="com.babelmarkdown.aikilan.actions.RefreshTranslationPreviewAction"
-      text="BabelMarkdown: Refresh Translation Preview"
-      description="Refresh translation preview for the current Markdown file"
-      icon="/icons/logo.png">
+      text="Refresh Translation"
+      description="Refresh translation preview for the current Markdown file">
       <add-to-group group-id="EditorPopupMenu" anchor="last" />
       <add-to-group group-id="ToolsMenu" anchor="last" />
     </action>

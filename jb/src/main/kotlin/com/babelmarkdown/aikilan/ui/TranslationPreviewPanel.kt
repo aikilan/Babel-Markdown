@@ -40,6 +40,41 @@ class TranslationPreviewPanel(
     }
   }
 
+  fun clear() {
+    val script = """
+      (function() {
+        const status = document.getElementById('preview-status');
+        const error = document.getElementById('preview-error');
+        const warning = document.getElementById('preview-warning');
+        const retry = document.getElementById('preview-retry');
+        const content = document.getElementById('preview-content');
+
+        if (status) {
+          status.textContent = '';
+          status.setAttribute('data-state', 'idle');
+        }
+        if (error) {
+          error.hidden = true;
+          error.textContent = '';
+        }
+        if (warning) {
+          warning.hidden = true;
+          warning.textContent = '';
+        }
+        if (retry) {
+          retry.hidden = true;
+          retry.disabled = true;
+        }
+        if (content) {
+          content.innerHTML = '';
+        }
+      })();
+    """.trimIndent()
+    ApplicationManager.getApplication().invokeLater {
+      browser?.cefBrowser?.executeJavaScript(script, browser?.cefBrowser?.url ?: "about:blank", 0)
+    }
+  }
+
   private fun createComponent(): JComponent {
     if (!JBCefApp.isSupported()) {
       return JPanel(BorderLayout()).apply {

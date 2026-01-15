@@ -15,12 +15,16 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VfsUtilCore
 import com.intellij.openapi.vfs.VirtualFile
 import com.babelmarkdown.aikilan.settings.ApiKeyStore
 import com.babelmarkdown.aikilan.settings.BabelMarkdownSettings
+import com.intellij.openapi.wm.ToolWindowManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,6 +50,19 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
   private var currentFile: VirtualFile? = null
   private var translationJob: Job? = null
   private val isDisposed = AtomicBoolean(false)
+
+  init {
+    project.messageBus.connect(this).subscribe(
+      FileEditorManagerListener.FILE_EDITOR_MANAGER,
+      object : FileEditorManagerListener {
+        override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
+          if (file == currentFile) {
+            closePreview()
+          }
+        }
+      },
+    )
+  }
 
   fun attachPanel(panel: TranslationPreviewPanel) {
     this.panel = panel
@@ -201,6 +218,9 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
           ),
         )
       } catch (error: Exception) {
+        if (error is CancellationException) {
+          return@launch
+        }
         logger.warn("Translation failed.", error)
         postError(error.message ?: "Translation failed.", file, resolvedConfig.targetLanguage, null)
       } finally {
@@ -221,6 +241,19 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
 
   override fun onRequestRetry() {
     refreshPreview()
+  }
+
+  private fun closePreview() {
+    translationJob?.cancel()
+    translationJob = null
+    currentEditor = null
+    currentFile = null
+    panel?.clear()
+    ApplicationManager.getApplication().invokeLater {
+      ToolWindowManager.getInstance(project)
+        .getToolWindow("BabelMarkdown Preview")
+        ?.hide(null)
+    }
   }
 
   override fun dispose() {

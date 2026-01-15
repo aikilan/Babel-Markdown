@@ -81,6 +81,12 @@ if [[ -z "${JAVA_TOOL_OPTIONS:-}" ]]; then
 fi
 
 cd "$ROOT_DIR"
+if command -v node >/dev/null 2>&1; then
+  node "$SCRIPT_DIR/sync-plugin-description.js"
+else
+  echo "Node.js is required to sync README.md into plugin.xml."
+  exit 1
+fi
 "$GRADLE_BIN_RESOLVED" --no-daemon buildPlugin
 
 dist_dir="$ROOT_DIR/build/distributions"

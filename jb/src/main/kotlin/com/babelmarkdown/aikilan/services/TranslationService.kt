@@ -3,10 +3,13 @@ package com.babelmarkdown.aikilan.services
 import com.babelmarkdown.aikilan.util.MarkdownRenderer
 import com.intellij.openapi.diagnostic.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -116,7 +119,10 @@ class TranslationService(
             prompt = request.prompt,
           ),
         )
+        currentCoroutineContext().ensureActive()
         return SegmentOutcome(result = result, recovery = null)
+      } catch (error: CancellationException) {
+        throw error
       } catch (error: TranslationProviderException) {
         lastError = error
         if (!error.retryable || attempts >= request.config.retryMaxAttempts) {
