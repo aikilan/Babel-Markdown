@@ -21,14 +21,14 @@ class RefreshTranslationPreviewAction : AnAction(), DumbAware {
 
     if (editor != null && file != null && isMarkdownFile(file)) {
       if (toolWindow != null) {
-        toolWindow.activate { service.openPreview(editor, file) }
+        toolWindow.activate { service.openPreview(editor, file, true) }
       } else {
-        service.openPreview(editor, file)
+        service.openPreview(editor, file, true)
       }
       return
     }
 
-    service.refreshPreview()
+    service.refreshPreview(true)
   }
 
   override fun update(event: AnActionEvent) {

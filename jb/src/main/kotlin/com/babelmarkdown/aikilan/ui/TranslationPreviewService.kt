@@ -3,6 +3,7 @@ package com.babelmarkdown.aikilan.ui
 import com.babelmarkdown.aikilan.services.MarkdownSegmenter
 import com.babelmarkdown.aikilan.services.OpenAITranslationClient
 import com.babelmarkdown.aikilan.services.PromptResolver
+import com.babelmarkdown.aikilan.services.TranslationCacheStore
 import com.babelmarkdown.aikilan.services.TranslationRequest
 import com.babelmarkdown.aikilan.services.TranslationService
 import com.babelmarkdown.aikilan.services.TranslationSegmentUpdate
@@ -43,6 +44,7 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
   private val segmenter = MarkdownSegmenter()
   private val client = OpenAITranslationClient(logger)
   private val translationService = TranslationService(logger, client, renderer, segmenter)
+  private val cacheStore = TranslationCacheStore(project, logger)
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   private var panel: TranslationPreviewPanel? = null
@@ -71,7 +73,7 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
     }
   }
 
-  fun openPreview(editor: Editor, file: VirtualFile) {
+  fun openPreview(editor: Editor, file: VirtualFile, forceRefresh: Boolean = false) {
     if (!isMarkdownFile(file)) {
       notify("BabelMarkdown only supports Markdown files.", NotificationType.WARNING)
       return
@@ -79,10 +81,10 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
 
     currentEditor = editor
     currentFile = file
-    refreshPreview()
+    refreshPreview(forceRefresh)
   }
 
-  fun refreshPreview() {
+  fun refreshPreview(forceRefresh: Boolean = false) {
     val editor = currentEditor
     val file = currentFile
     val panel = panel
@@ -122,6 +124,8 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
       return
     }
 
+    val documentText = document.text
+
     val resolvedConfig = com.babelmarkdown.aikilan.services.ResolvedTranslationConfig(
       apiBaseUrl = state.apiBaseUrl,
       apiKey = apiKey,
@@ -136,7 +140,7 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
     val prompt = promptResolver.resolve(project, resolvedConfig.promptTemplate)
     val documentLabel = buildDocumentLabel(file)
     val request = TranslationRequest(
-      documentText = document.text,
+      documentText = documentText,
       fileName = file.name,
       documentLabel = documentLabel,
       config = resolvedConfig,
@@ -144,6 +148,49 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
     )
 
     translationJob?.cancel()
+
+    if (forceRefresh) {
+      cacheStore.clearForFile(file)
+    } else {
+      val cached = cacheStore.load(file, documentText, resolvedConfig, prompt)
+      if (cached != null) {
+        panel.postMessage(
+          mapOf(
+            "type" to "translationResult",
+            "payload" to mapOf(
+              "markdown" to cached.markdown,
+              "html" to cached.html,
+              "providerId" to cached.providerId,
+              "latencyMs" to cached.latencyMs,
+              "targetLanguage" to cached.targetLanguage,
+              "documentPath" to cached.documentLabel,
+              "sourceVersion" to document.modificationStamp,
+              "wasCached" to true,
+              "recoveries" to cached.recoveries.map {
+                mapOf(
+                  "type" to it.type,
+                  "code" to toWireCode(it.code),
+                  "attempts" to it.attempts,
+                  "message" to it.message,
+                )
+              },
+            ),
+          ),
+        )
+        panel.postMessage(
+          mapOf(
+            "type" to "setLoading",
+            "payload" to mapOf(
+              "isLoading" to false,
+              "documentPath" to cached.documentLabel,
+              "targetLanguage" to cached.targetLanguage,
+              "totalSegments" to null,
+            ),
+          ),
+        )
+        return
+      }
+    }
 
     panel.postMessage(
       mapOf(
@@ -217,6 +264,7 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
             ),
           ),
         )
+        cacheStore.save(file, documentLabel, documentText, resolvedConfig, prompt, result)
       } catch (error: Exception) {
         if (error is CancellationException) {
           return@launch
