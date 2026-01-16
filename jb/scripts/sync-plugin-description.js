@@ -72,8 +72,11 @@ function main() {
   const normalizedMarkdown = replaceIdeMentions(readme);
   let html = renderMarkdown(normalizedMarkdown);
   html = addHeadingIds(html);
+  const descriptionPrefix =
+    'Babel Markdown is a translation preview tool for Markdown documents.';
+  const descriptionBody = `${descriptionPrefix}\n${html.trim()}`;
 
-  if (html.includes(']]>')) {
+  if (descriptionBody.includes(']]>')) {
     throw new Error('README render contains "]]>", which breaks CDATA.');
   }
 
@@ -85,7 +88,7 @@ function main() {
   }
 
   const updated = pluginXml.replace(descriptionRegex, (_, indent) => {
-    const trimmed = html.trimEnd();
+    const trimmed = descriptionBody.trimEnd();
     return `${indent}<description><![CDATA[\n${trimmed}\n${indent}]]></description>`;
   });
 
