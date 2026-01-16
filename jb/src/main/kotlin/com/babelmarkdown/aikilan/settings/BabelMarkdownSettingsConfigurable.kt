@@ -1,8 +1,12 @@
 package com.babelmarkdown.aikilan.settings
 
+import com.intellij.openapi.components.service
 import com.intellij.openapi.options.Configurable
+import com.intellij.openapi.project.ProjectManager
+import com.babelmarkdown.aikilan.ui.TranslationPreviewService
 import com.intellij.openapi.util.NlsContexts
 import com.intellij.ui.components.JBPasswordField
+import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
 import java.awt.BorderLayout
@@ -23,6 +27,7 @@ class BabelMarkdownSettingsConfigurable : Configurable {
   private val timeoutField = intSpinner(30000, 1000, 600000, 1000)
   private val concurrencyField = intSpinner(2, 1, 8, 1)
   private val retryField = intSpinner(3, 1, 6, 1)
+  private val debugPanelEnabledCheckbox = JBCheckBox("Enable Debug Panel")
 
   private var component: JPanel? = null
 
@@ -38,6 +43,7 @@ class BabelMarkdownSettingsConfigurable : Configurable {
         .addLabeledComponent("Timeout (ms)", timeoutField, 1, false)
         .addLabeledComponent("Concurrency Limit", concurrencyField, 1, false)
         .addLabeledComponent("Retry Attempts", retryField, 1, false)
+        .addComponent(debugPanelEnabledCheckbox, 1)
         .panel
 
       component = JPanel(BorderLayout()).apply {
@@ -60,7 +66,8 @@ class BabelMarkdownSettingsConfigurable : Configurable {
       targetLanguageField.text.trim() != state.targetLanguage ||
       spinnerValue(timeoutField) != state.timeoutMs ||
       spinnerValue(concurrencyField) != state.concurrencyLimit ||
-      spinnerValue(retryField) != state.retryMaxAttempts
+      spinnerValue(retryField) != state.retryMaxAttempts ||
+      debugPanelEnabledCheckbox.isSelected != state.debugPanelEnabled
   }
 
   override fun apply() {
@@ -71,9 +78,14 @@ class BabelMarkdownSettingsConfigurable : Configurable {
     state.timeoutMs = spinnerValue(timeoutField)
     state.concurrencyLimit = spinnerValue(concurrencyField)
     state.retryMaxAttempts = spinnerValue(retryField)
+    state.debugPanelEnabled = debugPanelEnabledCheckbox.isSelected
 
     val apiKey = String(apiKeyField.password)
     apiKeyStore.setApiKey(apiKey)
+
+    ProjectManager.getInstance().openProjects.forEach { project ->
+      project.service<TranslationPreviewService>().updateDebugPanelVisibility()
+    }
   }
 
   override fun reset() {
@@ -84,6 +96,7 @@ class BabelMarkdownSettingsConfigurable : Configurable {
     timeoutField.value = state.timeoutMs
     concurrencyField.value = state.concurrencyLimit
     retryField.value = state.retryMaxAttempts
+    debugPanelEnabledCheckbox.isSelected = state.debugPanelEnabled
 
     apiKeyField.text = apiKeyStore.getApiKey().orEmpty()
   }

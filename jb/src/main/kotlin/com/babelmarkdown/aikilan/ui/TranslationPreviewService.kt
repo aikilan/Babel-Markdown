@@ -4,6 +4,8 @@ import com.babelmarkdown.aikilan.services.MarkdownSegmenter
 import com.babelmarkdown.aikilan.services.OpenAITranslationClient
 import com.babelmarkdown.aikilan.services.PromptResolver
 import com.babelmarkdown.aikilan.services.TranslationCacheStore
+import com.babelmarkdown.aikilan.services.TranslationDebugEvent
+import com.babelmarkdown.aikilan.services.TranslationDebugListener
 import com.babelmarkdown.aikilan.services.TranslationRequest
 import com.babelmarkdown.aikilan.services.TranslationService
 import com.babelmarkdown.aikilan.services.TranslationSegmentUpdate
@@ -35,19 +37,23 @@ import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 @Service(Service.Level.PROJECT)
-class TranslationPreviewService(private val project: Project) : Disposable, WebviewMessageHandler {
+class TranslationPreviewService(private val project: Project) :
+  Disposable,
+  WebviewMessageHandler,
+  TranslationDebugListener {
   private val logger = Logger.getInstance(TranslationPreviewService::class.java)
   private val settings = BabelMarkdownSettings.getInstance()
   private val apiKeyStore = ApplicationManager.getApplication().getService(ApiKeyStore::class.java)
   private val promptResolver = PromptResolver(logger)
   private val renderer = MarkdownRenderer()
   private val segmenter = MarkdownSegmenter()
-  private val client = OpenAITranslationClient(logger)
+  private val client = OpenAITranslationClient(this)
   private val translationService = TranslationService(logger, client, renderer, segmenter)
   private val cacheStore = TranslationCacheStore(project, logger)
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
   private var panel: TranslationPreviewPanel? = null
+  private var debugPanel: TranslationDebugPanel? = null
   private var currentEditor: Editor? = null
   private var currentFile: VirtualFile? = null
   private var translationJob: Job? = null
@@ -70,6 +76,22 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
     this.panel = panel
     if (currentEditor != null && currentFile != null) {
       refreshPreview()
+    }
+  }
+
+  fun attachDebugPanel(panel: TranslationDebugPanel) {
+    this.debugPanel = panel
+    panel.setEnabled(settings.state.debugPanelEnabled)
+  }
+
+  fun updateDebugPanelVisibility() {
+    val panel = debugPanel ?: return
+    val enabled = settings.state.debugPanelEnabled
+    ApplicationManager.getApplication().invokeLater {
+      panel.setEnabled(enabled)
+      if (!enabled) {
+        panel.clear()
+      }
     }
   }
 
@@ -297,6 +319,7 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
     currentEditor = null
     currentFile = null
     panel?.clear()
+    debugPanel?.clear()
     ApplicationManager.getApplication().invokeLater {
       ToolWindowManager.getInstance(project)
         .getToolWindow("BabelMarkdown Preview")
@@ -308,6 +331,17 @@ class TranslationPreviewService(private val project: Project) : Disposable, Webv
     isDisposed.set(true)
     translationJob?.cancel()
     scope.coroutineContext.cancel()
+  }
+
+  override fun onDebugEvent(event: TranslationDebugEvent) {
+    val panel = debugPanel ?: return
+    val enabled = settings.state.debugPanelEnabled
+    ApplicationManager.getApplication().invokeLater {
+      panel.setEnabled(enabled)
+      if (enabled) {
+        panel.addEntry(event)
+      }
+    }
   }
 
   private fun postSegmentUpdate(

@@ -182,12 +182,13 @@
     }
   },
   "scripts": {
+    "sync:prompts": "node scripts/sync-prompts.js",
     "vscode:prepublish": "pnpm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev:server": "tsx server/index.ts",
     "build:extension": "vite build --config vite.config.extension.mjs",
     "build:webview": "vite build --config vite.config.webview.mjs && vite build --config vite.config.exportBridge.mjs",
-    "build": "pnpm run typecheck && pnpm run build:extension && pnpm run build:webview",
+    "build": "pnpm run sync:prompts && pnpm run typecheck && pnpm run build:extension && pnpm run build:webview",
     "compile": "pnpm run build",
     "vsc:package": "pnpm run build && pnpm exec vsce package --no-dependencies",
     "vsc:publish": "pnpm run vsc:package && pnpm exec vsce publish --no-dependencies",

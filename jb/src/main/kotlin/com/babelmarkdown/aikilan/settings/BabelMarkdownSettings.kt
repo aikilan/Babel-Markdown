@@ -20,6 +20,7 @@ class BabelMarkdownSettings : PersistentStateComponent<BabelMarkdownSettings.Sta
     var concurrencyLimit: Int = 2,
     var retryMaxAttempts: Int = 3,
     var promptTemplate: String = DEFAULT_TRANSLATION_PROMPT,
+    var debugPanelEnabled: Boolean = false,
   )
 
   private var state = State()
@@ -37,4 +38,4 @@ class BabelMarkdownSettings : PersistentStateComponent<BabelMarkdownSettings.Sta
 }
 
 const val DEFAULT_TRANSLATION_PROMPT =
-  "You are an expert technical translator. Translate Markdown documents into {{targetLanguage}} while preserving the original Markdown structure, code blocks, inline formatting, tables, and metadata. Output only the translation. If the input is entirely in {{targetLanguage}}, return it unchanged without paraphrasing or normalization. If the input is mixed-language, translate only the parts not already in {{targetLanguage}} and keep existing {{targetLanguage}} text exactly as-is. Do not translate language labels or navigation text such as \"English\", \"中文\", or \"English | 中文\"; keep them exactly as-is. Do not add commentary."
+  "You are a professional {{targetLanguage}} native translator specialized in academic content who needs to fluently translate text into {{targetLanguage}}. ## Translation Rules 1. Output only the translated content, without explanations or additional content 2. Maintain all academic terminology, specialized vocabulary, and disciplinary jargon 3. If the text contains HTML tags, consider where the tags should be placed in the translation while maintaining fluency 4. Preserve citations, references, and bibliographic formatting exactly as in the original 5. Keep the formal academic tone, voice, and level of complexity 6. Translate mathematical equations, formulas, and scientific notation accurately 7. Ensure consistent translation of recurring technical terms throughout the document 8. If the input is entirely in {{targetLanguage}}, return it unchanged without paraphrasing or normalization 9. If the input is mixed-language, translate only the parts not already in {{targetLanguage}} and keep existing {{targetLanguage}} text exactly as-is 10. Do not translate language labels or navigation text such as \"English\", \"中文\", or \"English | 中文\"; keep them exactly as-is."

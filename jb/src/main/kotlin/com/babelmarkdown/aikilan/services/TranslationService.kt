@@ -12,6 +12,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 
 class TranslationService(
@@ -53,6 +55,9 @@ class TranslationService(
     val concurrency = normalizeConcurrency(request.config.concurrencyLimit, totalSegments)
     val results = Array<RawTranslationResult?>(totalSegments) { null }
     val recoveries = java.util.Collections.synchronizedList(mutableListOf<SegmentRecovery>())
+    val pendingUpdates = mutableMapOf<Int, TranslationSegmentUpdate>()
+    var nextFlushIndex = 0
+    val flushMutex = Mutex()
 
     coroutineScope {
       val semaphore = Semaphore(concurrency)
@@ -67,18 +72,24 @@ class TranslationService(
             }
 
             val html = renderer.render(outcome.result.markdown)
-            onSegment(
-              TranslationSegmentUpdate(
-                segmentIndex = index,
-                totalSegments = totalSegments,
-                markdown = outcome.result.markdown,
-                html = html,
-                latencyMs = outcome.result.latencyMs,
-                providerId = outcome.result.providerId,
-                wasCached = false,
-                recovery = outcome.recovery,
-              ),
+            val update = TranslationSegmentUpdate(
+              segmentIndex = index,
+              totalSegments = totalSegments,
+              markdown = outcome.result.markdown,
+              html = html,
+              latencyMs = outcome.result.latencyMs,
+              providerId = outcome.result.providerId,
+              wasCached = false,
+              recovery = outcome.recovery,
             )
+            flushMutex.withLock {
+              pendingUpdates[index] = update
+              while (true) {
+                val next = pendingUpdates.remove(nextFlushIndex) ?: break
+                onSegment(next)
+                nextFlushIndex += 1
+              }
+            }
           }
         }
       }

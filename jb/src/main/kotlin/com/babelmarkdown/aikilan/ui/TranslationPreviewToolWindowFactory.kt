@@ -14,7 +14,14 @@ class TranslationPreviewToolWindowFactory : ToolWindowFactory, DumbAware {
     val panel = TranslationPreviewPanel(project, Logger.getInstance(TranslationPreviewPanel::class.java), service)
     service.attachPanel(panel)
 
-    val content = ContentFactory.getInstance().createContent(panel.component, "", false)
-    toolWindow.contentManager.addContent(content)
+    val previewContent = ContentFactory.getInstance().createContent(panel.component, "Preview", false)
+    toolWindow.contentManager.addContent(previewContent)
+
+    val debugPanel = TranslationDebugPanel()
+    service.attachDebugPanel(debugPanel)
+    val debugContent = ContentFactory.getInstance().createContent(debugPanel.component, "Debug", false)
+    toolWindow.contentManager.addContent(debugContent)
+
+    toolWindow.contentManager.setSelectedContent(previewContent, true)
   }
 }

@@ -82,6 +82,7 @@ fi
 
 cd "$ROOT_DIR"
 if command -v node >/dev/null 2>&1; then
+  node "$ROOT_DIR/../scripts/sync-prompts.js"
   node "$SCRIPT_DIR/sync-plugin-description.js"
 else
   echo "Node.js is required to sync README.md into plugin.xml."

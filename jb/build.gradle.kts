@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.babelmarkdown.aikilan"
-version = "0.1.5"
+version = "0.1.7"
 
 repositories {
   mavenCentral()
