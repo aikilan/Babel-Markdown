@@ -11,7 +11,8 @@ General (VS Code extension)
 - `pnpm build:webview`: Build the webview bundles (preview + export bridge).
 - `pnpm build`: Typecheck + extension build + webview build.
 - `pnpm compile`: Alias of `build`.
-- `pnpm package`: Build and package VS Code extension (`.vsix`).
+- `pnpm vscode:prepublish`: VS Code packaging hook (runs `build`).
+- `pnpm vsc:package`: Build and package VS Code extension (`.vsix`).
 - `pnpm vsc:publish`: Package and publish to VS Code Marketplace.
 - `pnpm compile-tests`: Build test TS sources.
 - `pnpm watch`: Watch TypeScript build.
