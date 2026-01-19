@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.babelmarkdown.aikilan"
-version = "0.1.7"
+version = "0.1.8"
 
 repositories {
   mavenCentral()
@@ -34,7 +34,6 @@ dependencies {
 tasks {
   patchPluginXml {
     sinceBuild.set("251")
-    untilBuild.set("252.*")
   }
 
   withType<KotlinCompile>().configureEach {
