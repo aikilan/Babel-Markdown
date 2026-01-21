@@ -34,7 +34,7 @@ dependencies {
 tasks {
   patchPluginXml {
     sinceBuild.set("251")
-    untilBuild.set("999.*")
+    untilBuild.set("255.*")
   }
 
   withType<KotlinCompile>().configureEach {
