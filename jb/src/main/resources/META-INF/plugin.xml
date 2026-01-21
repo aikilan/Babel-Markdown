@@ -5,7 +5,7 @@
   <description><![CDATA[
 Babel Markdown is a translation preview tool for Markdown documents.
 <h1 id="babel-markdown">Babel Markdown</h1>
-<p><img src="https://raw.githubusercontent.com/xukechu/Babel-Markdown/refs/heads/main/assets/images/Snipaste_2025-11-06_18-16-02.png" alt="Babel Markdown preview"></p>
+<p></p>
 <p><a href="#english">English</a> · <a href="#%E4%B8%AD%E6%96%87">中文</a> · <a href="LICENSE">License</a></p>
 <h2 id="english">English</h2>
 <p>Babel Markdown brings real-time AI translation previews to 您的 IDEA so you can compare source Markdown with translated output in a single workspace.</p>
@@ -38,7 +38,7 @@ Babel Markdown is a translation preview tool for Markdown documents.
 <li>Fast QA of Markdown READMEs, release notes, or tutorials.</li>
 <li>Collaboration scenarios where teams need synchronized multilingual content.</li>
 </ul>
-<p><img src="https://raw.githubusercontent.com/xukechu/Babel-Markdown/refs/heads/main/assets/images/Snipaste_2025-11-06_16-51-04.png" alt="Babel Markdown secondary preview"></p>
+<p></p>
 <h2 id="中文">中文</h2>
 <p>Babel Markdown 为 您的 IDEA 提供实时翻译预览能力，让原文 Markdown 与 AI 翻译后的内容在同一视图中同步呈现，帮助你高效校对多语言文档。</p>
 <h3 id="主要特性">主要特性</h3>
@@ -83,7 +83,7 @@ Babel Markdown is a translation preview tool for Markdown documents.
       id="BabelMarkdown Preview"
       anchor="right"
       factoryClass="com.babelmarkdown.aikilan.ui.TranslationPreviewToolWindowFactory"
-      icon="/icons/logo.png" />
+      icon="/icons/icon.svg" />
     <notificationGroup id="BabelMarkdown" displayType="BALLOON" />
   </extensions>
 

@@ -48,6 +48,10 @@ function addHeadingIds(html) {
   });
 }
 
+function stripImages(html) {
+  return html.replace(/<img\b[^>]*>/gi, '');
+}
+
 function renderMarkdown(markdown) {
   try {
     // eslint-disable-next-line global-require
@@ -72,6 +76,7 @@ function main() {
   const normalizedMarkdown = replaceIdeMentions(readme);
   let html = renderMarkdown(normalizedMarkdown);
   html = addHeadingIds(html);
+  html = stripImages(html);
   const descriptionPrefix =
     'Babel Markdown is a translation preview tool for Markdown documents.';
   const descriptionBody = `${descriptionPrefix}\n${html.trim()}`;
