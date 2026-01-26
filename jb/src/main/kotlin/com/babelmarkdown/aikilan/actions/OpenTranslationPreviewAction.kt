@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.wm.ToolWindowManager
 
@@ -13,7 +14,9 @@ class OpenTranslationPreviewAction : AnAction(), DumbAware {
   override fun actionPerformed(event: AnActionEvent) {
     val project = event.project ?: return
     val editor = event.getData(CommonDataKeys.EDITOR) ?: return
-    val file = event.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
+    val file = event.getData(CommonDataKeys.VIRTUAL_FILE)
+      ?: FileDocumentManager.getInstance().getFile(editor.document)
+      ?: return
 
     val toolWindow = ToolWindowManager.getInstance(project)
       .getToolWindow("BabelMarkdown Preview")
@@ -28,8 +31,10 @@ class OpenTranslationPreviewAction : AnAction(), DumbAware {
   }
 
   override fun update(event: AnActionEvent) {
+    val editor = event.getData(CommonDataKeys.EDITOR)
     val file = event.getData(CommonDataKeys.VIRTUAL_FILE)
-    val enabled = file != null && isMarkdownFile(file)
+      ?: editor?.let { FileDocumentManager.getInstance().getFile(it.document) }
+    val enabled = editor != null && file != null && isMarkdownFile(file)
     event.presentation.isEnabled = enabled
     event.presentation.isVisible = true
   }

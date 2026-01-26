@@ -6,6 +6,7 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.components.service
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.wm.ToolWindowManager
 
@@ -15,6 +16,7 @@ class RefreshTranslationPreviewAction : AnAction(), DumbAware {
     val service = project.service<TranslationPreviewService>()
     val editor = event.getData(CommonDataKeys.EDITOR)
     val file = event.getData(CommonDataKeys.VIRTUAL_FILE)
+      ?: editor?.let { FileDocumentManager.getInstance().getFile(it.document) }
 
     val toolWindow = ToolWindowManager.getInstance(project)
       .getToolWindow("BabelMarkdown Preview")
